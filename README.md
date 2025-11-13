@@ -200,8 +200,8 @@ model:
   # Choose model size: tiny (fastest), small, base_plus, large (best quality)
   checkpoint: "sam2/checkpoints/sam2.1_hiera_tiny.pt"
 
-  # Use 512x512 config for 2-3x speedup
-  config: "configs/sam2.1_hiera_t_512.yaml"
+  # Config path (relative to SAM2 package, no 'sam2/' prefix)
+  config: "configs/sam2.1/sam2.1_hiera_t.yaml"
 
   # Device: null (auto-detect), "mps", "cuda", "cpu"
   device: null
@@ -293,7 +293,7 @@ import cv2
 
 # Initialize tracker
 tracker = SAM2CameraTracker(
-    config_file="sam2/configs/sam2.1/sam2.1_hiera_t.yaml",
+    config_file="configs/sam2.1/sam2.1_hiera_t.yaml",
     checkpoint_path="sam2/checkpoints/sam2.1_hiera_tiny.pt",
     device="mps",  # or "cuda", "cpu"
     use_compile=True,
@@ -495,7 +495,7 @@ python src/cli_video.py input.mp4 output.mp4 \
 Edit `configs/config.yaml`:
 ```yaml
 model:
-  config: "configs/sam2.1_hiera_t_512.yaml"
+  config: "configs/sam2.1/sam2.1_hiera_t.yaml"  # Use standard config
   checkpoint: "sam2/checkpoints/sam2.1_hiera_tiny.pt"
   compile: true
 input:

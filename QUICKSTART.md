@@ -83,6 +83,14 @@ cd ~/dev/nlp/real-time-sam2/sam2/checkpoints
 cd ../..
 ```
 
+#### Issue: "Cannot find primary config" or "MissingConfigException"
+**Solution**: The config path should be relative to SAM2 package (no `sam2/` prefix). Check that `configs/config.yaml` has:
+```yaml
+model:
+  config: "configs/sam2.1/sam2.1_hiera_t.yaml"  # Correct
+  # NOT: "sam2/configs/sam2.1/sam2.1_hiera_t.yaml"  # Wrong
+```
+
 ### Quick Performance Test
 
 ```bash

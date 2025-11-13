@@ -4,10 +4,11 @@
 model:
   # Model configuration and checkpoint paths
   # Use 512x512 config for faster performance, or standard configs for quality
-  config: "sam2/configs/sam2.1/sam2.1_hiera_t.yaml"
+  # Note: config path is relative to SAM2 package (no 'sam2/' prefix needed for Hydra)
+  config: "configs/sam2.1/sam2.1_hiera_t.yaml"
   # config: "configs/sam2.1_hiera_t_512.yaml"  # Use this for 512x512 fast mode
 
-  # Checkpoint path - available sizes: tiny, small, base_plus, large
+  # Checkpoint path - full path from project root
   checkpoint: "sam2/checkpoints/sam2.1_hiera_tiny.pt"
   # checkpoint: "sam2/checkpoints/sam2.1_hiera_small.pt"
   # checkpoint: "sam2/checkpoints/sam2.1_hiera_base_plus.pt"
