@@ -1056,8 +1056,9 @@ class SAM2CameraPredictor(SAM2Base):
         )
         if backbone_out is None:
             # Cache miss -- we will run inference on a single image
+            device = self.condition_state["device"]
             image = (
-                self.condition_state["images"][frame_idx].cuda().float().unsqueeze(0)
+                self.condition_state["images"][frame_idx].to(device).float().unsqueeze(0)
             )
             backbone_out = self.forward_image(image)
             # Cache the most recent frame's feature (for repeated interactions with
@@ -1084,7 +1085,8 @@ class SAM2CameraPredictor(SAM2Base):
 
     ###
     def _get_feature(self, img, batch_size):
-        image = img.cuda().float().unsqueeze(0)
+        device = self.condition_state["device"]
+        image = img.to(device).float().unsqueeze(0)
         backbone_out = self.forward_image(image)
         expanded_image = image.expand(batch_size, -1, -1, -1)
         expanded_backbone_out = {
