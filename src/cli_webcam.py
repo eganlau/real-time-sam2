@@ -145,7 +145,7 @@ class InteractiveTracker:
                 num_objects=tracking_config.get('max_objects', 10),
                 verbose=True
             )
-            print("NOTE: Kalman tracker uses automatic detection, not manual bbox selection")
+            print("NOTE: Kalman tracker uses dual memory banks with motion prediction for robust tracking")
         else:
             raise ValueError(f"Unknown tracker mode: {tracker_mode}. Choose 'camera' or 'kalman'")
 

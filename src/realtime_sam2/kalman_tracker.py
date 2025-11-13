@@ -2,12 +2,14 @@
 SAM2 Kalman Tracker - Wrapper around SAM2ObjectTracker (SAMURAI)
 
 Provides a simplified API wrapper around SAMURAI's SAM2ObjectTracker
-with Kalman filter for autonomous real-time tracking.
+with Kalman filter for robust real-time tracking.
 
 Reference: sam2_realtime (SAMURAI implementation)
-NOTE: This tracker is designed for automatic tracking and doesn't support
-explicit object selection via bounding boxes. It autonomously tracks
-whatever objects it detects using Kalman filtering and dual memory banks.
+Features:
+- Dual memory banks (short-term + long-term)
+- Kalman filter for motion prediction
+- Occlusion handling
+- Supports both manual selection and automatic detection
 """
 
 from typing import Dict, List, Optional, Tuple
@@ -20,13 +22,14 @@ from .sam2_object_tracker import SAM2ObjectTracker
 
 class SAM2KalmanTracker:
     """
-    Wrapper around SAM2ObjectTracker for autonomous tracking with Kalman filter.
+    Wrapper around SAM2ObjectTracker for robust tracking with Kalman filter.
 
-    NOTE: Unlike SAM2CameraTracker, this tracker does NOT support manual object
-    selection. It automatically tracks objects using motion prediction and
-    dual memory banks (short-term + long-term with occlusion handling).
+    This tracker uses SAMURAI's dual memory architecture with:
+    - Short-term memory: Recent frames for quick adaptation
+    - Long-term memory: Historical features for occlusion recovery
+    - Kalman filter: Motion prediction for smooth tracking
 
-    For interactive bbox selection, use SAM2CameraTracker instead.
+    Supports both manual bbox selection and automatic detection.
     """
 
     def __init__(
@@ -63,7 +66,7 @@ class SAM2KalmanTracker:
             print(f"  Checkpoint: {checkpoint_path}")
             print(f"  Device: {self.device}")
             print(f"  Max objects: {num_objects}")
-            print(f"  NOTE: This tracker uses automatic detection, not manual selection")
+            print(f"  NOTE: Uses Kalman filter for motion prediction and occlusion handling")
 
         # Build SAM2 Object Tracker using SAMURAI's builder
         try:
@@ -105,8 +108,6 @@ class SAM2KalmanTracker:
 
         if self.verbose:
             print(f"Initialized with frame size: {first_frame.shape[1]}x{first_frame.shape[0]}")
-            print("WARNING: Kalman tracker uses automatic detection.")
-            print("Manual bbox selection via add_object() is not supported.")
 
         return True
 
@@ -119,33 +120,60 @@ class SAM2KalmanTracker:
         labels: Optional[np.ndarray] = None
     ) -> int:
         """
-        Add object - NOT SUPPORTED for Kalman tracker.
-
-        The Kalman tracker automatically detects and tracks objects.
-        Manual object selection is not supported.
+        Add a new object to track using Kalman filter.
 
         Args:
             frame: Current frame
-            obj_id: Object ID (ignored)
-            bbox: Bounding box (ignored)
-            points: Point prompts (ignored)
-            labels: Point labels (ignored)
+            obj_id: Object ID (auto-assigned by tracker, this param is ignored)
+            bbox: Bounding box as [x1, y1, x2, y2]
+            points: Point prompts (alternative to bbox)
+            labels: Point labels (for points input)
 
         Returns:
-            -1 (operation not supported)
+            Object ID assigned by the tracker
         """
-        if self.verbose:
-            print("WARNING: add_object() not supported for Kalman tracker")
-            print("This tracker automatically detects and tracks objects")
+        if not self.is_initialized:
+            raise RuntimeError("Tracker not initialized. Call initialize() first.")
 
-        return -1
+        try:
+            # Convert bbox to numpy array if provided
+            box_array = None
+            if bbox is not None:
+                # Convert [x1, y1, x2, y2] to numpy array
+                box_array = np.array(bbox, dtype=np.float32)
+
+            # Track new object using SAMURAI's method
+            result = self.tracker.track_new_object(
+                img=frame,
+                points=points,
+                box=box_array,
+                mask=None
+            )
+
+            # Get the assigned object ID from the tracker's memory
+            # SAMURAI uses 0-based indexing internally
+            num_tracked = len(self.tracker.memory_bank.obj_id_to_idx)
+            assigned_id = num_tracked  # 0-based
+
+            if self.verbose:
+                prompt_type = "bbox" if bbox is not None else "points"
+                print(f"Added object {assigned_id} with {prompt_type} to Kalman tracker")
+
+            return assigned_id
+
+        except Exception as e:
+            if self.verbose:
+                print(f"Error adding object: {e}")
+                import traceback
+                traceback.print_exc()
+            return -1
 
     def track(
         self,
         frame: np.ndarray
     ) -> Tuple[int, List[int], Dict[int, np.ndarray]]:
         """
-        Track objects automatically in the current frame.
+        Track objects in the current frame using Kalman filter.
 
         Args:
             frame: Current video frame (numpy array, BGR format)
@@ -157,28 +185,55 @@ class SAM2KalmanTracker:
             raise RuntimeError("Tracker not initialized. Call initialize() first.")
 
         try:
-            # Run automatic tracking with Kalman filter
+            # Run tracking with Kalman filter on all objects
             prediction = self.tracker.track_all_objects(frame)
 
             # Extract masks
             masks_dict = {}
-            if "pred_masks" in prediction:
-                pred_masks = prediction["pred_masks"]  # Shape: (num_objects, H, W)
+            if "pred_masks" in prediction and prediction["pred_masks"] is not None:
+                pred_masks = prediction["pred_masks"]
 
-                # Convert to dictionary
-                for obj_idx in range(pred_masks.shape[0]):
-                    mask = pred_masks[obj_idx].cpu().numpy() > 0.0
-                    if mask.any():  # Only include non-empty masks
-                        masks_dict[obj_idx + 1] = mask  # Use 1-based indexing
+                # Handle different tensor shapes
+                if pred_masks.ndim == 4:
+                    # Shape: (1, num_objects, H, W) - squeeze batch dimension
+                    pred_masks = pred_masks.squeeze(0)
+                elif pred_masks.ndim == 3:
+                    # Shape: (num_objects, H, W) - already correct
+                    pass
+                else:
+                    if self.verbose:
+                        print(f"Warning: Unexpected pred_masks shape: {pred_masks.shape}")
+                    return self.frame_idx, [], {}
+
+                # Convert each mask to numpy and add to dict
+                num_objects = pred_masks.shape[0]
+                for obj_idx in range(num_objects):
+                    mask = pred_masks[obj_idx]
+
+                    # Convert to numpy if needed
+                    if hasattr(mask, 'cpu'):
+                        mask = mask.cpu().numpy()
+
+                    # Apply threshold
+                    mask_binary = mask > 0.0
+
+                    # Only include non-empty masks
+                    if mask_binary.any():
+                        masks_dict[obj_idx] = mask_binary
 
             obj_ids = list(masks_dict.keys())
             self.frame_idx += 1
+
+            if self.verbose and len(obj_ids) > 0:
+                print(f"Tracking {len(obj_ids)} objects with Kalman filter")
 
             return self.frame_idx, obj_ids, masks_dict
 
         except Exception as e:
             if self.verbose:
                 print(f"Tracking error: {e}")
+                import traceback
+                traceback.print_exc()
             return self.frame_idx, [], {}
 
     def reset(self):
@@ -191,9 +246,16 @@ class SAM2KalmanTracker:
 
     def get_tracked_objects(self) -> List[int]:
         """Get list of currently tracked object IDs."""
-        # SAM2ObjectTracker manages objects internally
-        # Return estimated count based on memory bank
-        return []
+        if not self.is_initialized:
+            return []
+
+        # Get tracked object IDs from memory bank
+        try:
+            num_objects = len(self.tracker.memory_bank.obj_id_to_idx)
+            # Return 0-based indices as object IDs
+            return list(range(num_objects))
+        except:
+            return []
 
     def remove_object(self, obj_id: int):
         """
