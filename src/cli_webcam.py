@@ -211,12 +211,12 @@ class InteractiveTracker:
                     # Auto-detect on interval (only if tracking mode allows it)
                     if (self.use_auto_detect and
                         self.frame_count % self.auto_detect_interval == 0 and
-                        len(self.tracker.tracked_objects) < self.config.get('tracking', {}).get('max_objects', 10) and
+                        len(self.tracker.get_tracked_objects()) < self.config.get('tracking', {}).get('max_objects', 10) and
                         self.tracker.is_initialized):
                         self.auto_detect_objects(frame)
 
                     # Track objects
-                    if len(self.tracker.tracked_objects) > 0:
+                    if len(self.tracker.get_tracked_objects()) > 0:
                         frame_idx, obj_ids, self.masks_dict = self.tracker.track(frame)
                     else:
                         self.masks_dict = {}
@@ -229,7 +229,7 @@ class InteractiveTracker:
                         frame,
                         self.masks_dict,
                         fps=fps,
-                        instructions=instructions if len(self.tracker.tracked_objects) == 0 else None
+                        instructions=instructions if len(self.tracker.get_tracked_objects()) == 0 else None
                     )
                 else:
                     # Paused - use current frame
