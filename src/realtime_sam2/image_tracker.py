@@ -127,6 +127,31 @@ class SAM2ImageTracker:
 
         return obj_id
 
+    def _mask_to_bbox(self, mask: np.ndarray) -> Optional[np.ndarray]:
+        """
+        Extract bounding box from a binary mask.
+
+        Args:
+            mask: Binary mask array
+
+        Returns:
+            Bounding box as [x1, y1, x2, y2] or None if mask is empty
+        """
+        if not mask.any():
+            return None
+
+        # Find non-zero pixels
+        rows = np.any(mask, axis=1)
+        cols = np.any(mask, axis=0)
+
+        if not rows.any() or not cols.any():
+            return None
+
+        y1, y2 = np.where(rows)[0][[0, -1]]
+        x1, x2 = np.where(cols)[0][[0, -1]]
+
+        return np.array([x1, y1, x2, y2], dtype=np.float32)
+
     def track(
         self,
         frame: np.ndarray
@@ -164,7 +189,14 @@ class SAM2ImageTracker:
 
                     # Use the first (and only) mask
                     if masks is not None and len(masks) > 0:
-                        masks_dict[obj_id] = masks[0]
+                        mask = masks[0]
+                        masks_dict[obj_id] = mask
+
+                        # Update bbox based on current mask for next frame
+                        # This enables actual tracking as objects move
+                        new_bbox = self._mask_to_bbox(mask)
+                        if new_bbox is not None:
+                            self.tracked_objects[obj_id]['bbox'] = new_bbox
 
                 except Exception as e:
                     if self.verbose:
