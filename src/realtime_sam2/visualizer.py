@@ -88,6 +88,14 @@ class Visualizer:
             if hasattr(mask, 'cpu'):
                 mask = mask.cpu().numpy()
 
+            # Squeeze any extra dimensions (e.g., (1, H, W) -> (H, W))
+            while mask.ndim > 2:
+                mask = mask.squeeze()
+
+            # Ensure we have valid 2D mask
+            if mask.ndim != 2:
+                continue
+
             # Resize mask if needed
             if mask.shape[:2] != frame.shape[:2]:
                 mask = cv2.resize(
