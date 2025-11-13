@@ -156,7 +156,7 @@ class InteractiveTracker:
 
         # Warmup model if compiled
         if self.tracker.is_compiled:
-            self.tracker.warmup(first_frame, num_frames=5)
+            self.tracker.warmup(first_frame, num_frames=3)
 
         # Initialize tracker
         print("Initializing tracker with first frame...")

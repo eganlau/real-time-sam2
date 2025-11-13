@@ -8,6 +8,10 @@ for streaming video from webcams or video files.
 from typing import Dict, List, Optional, Tuple, Union
 import numpy as np
 import torch
+import tempfile
+import os
+from pathlib import Path
+import cv2
 
 from .utils import get_device
 
@@ -77,6 +81,10 @@ class SAM2CameraTracker:
         self.inference_state = None
         self.frame_buffer = []
 
+        # Temporary directory for storing frames (SAM2 requires JPEG folder or MP4)
+        self.temp_dir = tempfile.mkdtemp(prefix="sam2_frames_")
+        self.temp_frame_paths = []
+
         # Enable torch.compile for speedup
         if use_compile:
             if verbose:
@@ -115,13 +123,18 @@ class SAM2CameraTracker:
             print(f"Warming up compiled model with {num_frames} iterations...")
 
             try:
-                # Create dummy frames
-                dummy_frames = [dummy_frame] * num_frames
+                # Create temporary directory for warmup frames
+                warmup_dir = tempfile.mkdtemp(prefix="sam2_warmup_")
+
+                # Save dummy frames
+                for i in range(num_frames):
+                    frame_path = os.path.join(warmup_dir, f"{i:05d}.jpg")
+                    cv2.imwrite(frame_path, dummy_frame)
 
                 # Initialize state
                 with torch.inference_mode():
                     dummy_state = self.predictor.init_state(
-                        video_path=dummy_frames,
+                        video_path=warmup_dir,
                         offload_video_to_cpu=False,
                         offload_state_to_cpu=False,
                         async_loading_frames=False
@@ -139,6 +152,10 @@ class SAM2CameraTracker:
                     # Propagate through frames
                     for _ in self.predictor.propagate_in_video(dummy_state):
                         pass
+
+                # Cleanup warmup directory
+                import shutil
+                shutil.rmtree(warmup_dir, ignore_errors=True)
 
                 if self.verbose:
                     print("Warmup complete!")
@@ -160,11 +177,12 @@ class SAM2CameraTracker:
         try:
             # Reset frame buffer and add first frame
             self.frame_buffer = [first_frame]
+            self._save_frame_to_temp(first_frame, 0)
 
             with torch.inference_mode():
-                # Initialize state with first frame
+                # Initialize state with temp directory (SAM2 requires JPEG folder or MP4)
                 self.inference_state = self.predictor.init_state(
-                    video_path=self.frame_buffer,
+                    video_path=self.temp_dir,
                     offload_video_to_cpu=False,
                     offload_state_to_cpu=False,
                     async_loading_frames=False
@@ -182,6 +200,12 @@ class SAM2CameraTracker:
             if self.verbose:
                 print(f"Error initializing tracker: {e}")
             return False
+
+    def _save_frame_to_temp(self, frame: np.ndarray, frame_idx: int):
+        """Save a frame to temporary JPEG folder."""
+        frame_path = os.path.join(self.temp_dir, f"{frame_idx:05d}.jpg")
+        cv2.imwrite(frame_path, frame)
+        self.temp_frame_paths.append(frame_path)
 
     def add_object(
         self,
@@ -280,32 +304,38 @@ class SAM2CameraTracker:
             raise RuntimeError("Tracker not initialized. Call initialize() first.")
 
         try:
-            # Add new frame to buffer
+            # Add new frame to buffer and save to temp
             self.frame_buffer.append(frame)
             self.current_frame_idx = len(self.frame_buffer) - 1
+            self._save_frame_to_temp(frame, self.current_frame_idx)
 
-            # Reinitialize state with updated frame buffer
-            # Note: For better performance in long videos, you may want to
-            # limit the buffer size to a sliding window (e.g., last 30 frames)
-            if len(self.frame_buffer) > 50:  # Sliding window of 50 frames
+            # Manage buffer size with sliding window
+            max_buffer_size = 50
+            if len(self.frame_buffer) > max_buffer_size:
                 # Keep only recent frames
                 frames_to_keep = 30
+                frames_to_remove = len(self.frame_buffer) - frames_to_keep
+
+                # Remove old frames from buffer
                 self.frame_buffer = self.frame_buffer[-frames_to_keep:]
+
+                # Remove old frame files
+                for i in range(frames_to_remove):
+                    if i < len(self.temp_frame_paths):
+                        try:
+                            os.remove(self.temp_frame_paths[i])
+                        except:
+                            pass
+                self.temp_frame_paths = self.temp_frame_paths[frames_to_remove:]
 
                 # Reinitialize state with recent frames
                 with torch.inference_mode():
                     self.inference_state = self.predictor.init_state(
-                        video_path=self.frame_buffer,
+                        video_path=self.temp_dir,
                         offload_video_to_cpu=False,
                         offload_state_to_cpu=False,
                         async_loading_frames=False
                     )
-
-                    # Re-add all tracked objects to the new state
-                    for obj_id in list(self.object_ids):
-                        # Objects will need to be re-prompted after state reset
-                        # This is a limitation of the current approach
-                        pass
 
                 self.current_frame_idx = len(self.frame_buffer) - 1
 
@@ -341,8 +371,31 @@ class SAM2CameraTracker:
         self.current_frame_idx = 0
         self.object_ids = set()
 
+        # Clean up temp frames but keep directory
+        self._cleanup_temp_frames()
+
         if self.verbose:
             print("Tracker reset")
+
+    def _cleanup_temp_frames(self):
+        """Clean up temporary frame files."""
+        for frame_path in self.temp_frame_paths:
+            try:
+                if os.path.exists(frame_path):
+                    os.remove(frame_path)
+            except:
+                pass
+        self.temp_frame_paths = []
+
+    def __del__(self):
+        """Cleanup temporary directory on deletion."""
+        try:
+            self._cleanup_temp_frames()
+            if hasattr(self, 'temp_dir') and os.path.exists(self.temp_dir):
+                import shutil
+                shutil.rmtree(self.temp_dir, ignore_errors=True)
+        except:
+            pass
 
     def get_tracked_objects(self) -> List[int]:
         """Get list of currently tracked object IDs."""
