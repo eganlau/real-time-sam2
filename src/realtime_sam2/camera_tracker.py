@@ -9,7 +9,7 @@ from typing import Dict, List, Optional, Tuple, Union
 import numpy as np
 import torch
 
-from .utils import get_device, warmup_model
+from .utils import get_device
 
 
 class SAM2CameraTracker:
