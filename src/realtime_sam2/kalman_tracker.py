@@ -139,8 +139,19 @@ class SAM2KalmanTracker:
             # Convert bbox to numpy array if provided
             box_array = None
             if bbox is not None:
-                # Convert [x1, y1, x2, y2] to numpy array
-                box_array = np.array(bbox, dtype=np.float32)
+                # SAMURAI expects box format: (2, 2) as [[x1, y1], [x2, y2]]
+                # with normalized coordinates (0-1 range)
+                # Input is [x1, y1, x2, y2] in pixel coordinates
+                x1, y1, x2, y2 = bbox
+
+                # Normalize by frame dimensions
+                h, w = frame.shape[:2]
+                x1_norm = x1 / w
+                y1_norm = y1 / h
+                x2_norm = x2 / w
+                y2_norm = y2 / h
+
+                box_array = np.array([[x1_norm, y1_norm], [x2_norm, y2_norm]], dtype=np.float32)
 
             # Track new object using SAMURAI's method
             result = self.tracker.track_new_object(
