@@ -109,11 +109,13 @@ class SAM2CameraPredictor(SAM2Base):
         self.condition_state["offload_state_to_cpu"] = offload_state_to_cpu
         # the original video height and width, used for resizing final output scores
 
-        self.condition_state["device"] = torch.device("cuda")
+        # Use the model's device (supports mps, cuda, cpu)
+        model_device = next(self.parameters()).device
+        self.condition_state["device"] = model_device
         if offload_state_to_cpu:
             self.condition_state["storage_device"] = torch.device("cpu")
         else:
-            self.condition_state["storage_device"] = torch.device("cuda")
+            self.condition_state["storage_device"] = model_device
         # inputs on each frame
         self.condition_state["point_inputs_per_obj"] = {}
         self.condition_state["mask_inputs_per_obj"] = {}
