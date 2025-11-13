@@ -210,41 +210,5 @@ def mask_to_bbox(mask: np.ndarray, padding: int = 5) -> Optional[Tuple[int, int,
     return (int(x1), int(y1), int(x2), int(y2))
 
 
-def warmup_model(
-    predictor,
-    dummy_frame: np.ndarray,
-    num_warmup_frames: int = 5,
-    verbose: bool = True
-):
-    """
-    Warm up the model with dummy frames (for torch.compile).
-
-    Args:
-        predictor: SAM2 predictor instance
-        dummy_frame: A dummy frame to use for warmup
-        num_warmup_frames: Number of warmup iterations
-        verbose: Print warmup progress
-    """
-    if verbose:
-        print(f"Warming up model with {num_warmup_frames} frames...")
-
-    with torch.inference_mode():
-        try:
-            predictor.load_first_frame(dummy_frame)
-
-            for i in range(num_warmup_frames):
-                predictor.track(dummy_frame)
-                if verbose:
-                    print(f"  Warmup frame {i+1}/{num_warmup_frames}")
-        except Exception as e:
-            if verbose:
-                print(f"Warning: Warmup failed with error: {e}")
-
-    # Reset predictor state after warmup
-    try:
-        predictor.reset_state()
-    except:
-        pass
-
-    if verbose:
-        print("Warmup complete!")
+# Note: warmup_model has been moved to SAM2CameraTracker.warmup() method
+# to properly work with the SAM2VideoPredictor API

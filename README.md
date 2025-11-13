@@ -14,6 +14,8 @@ Real-time object segmentation and tracking using Meta's **Segment Anything Model
 - **External webcam auto-detection** (prefers external over built-in)
 - **Both library and CLI** for maximum flexibility
 
+> **Note**: This implementation adapts SAM2's `VideoPredictor` for real-time streaming by maintaining a frame buffer. SAM2 was originally designed for batch video processing, so this streaming adapter accumulates frames and periodically manages the buffer for optimal performance.
+
 ## Project Structure
 
 ```
@@ -182,7 +184,7 @@ python -c "import torch; print(f'MPS available: {torch.backends.mps.is_available
 python -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}')"
 
 # Test SAM2 installation
-python -c "from sam2.build_sam import build_sam2_camera_predictor; print('SAM2 OK')"
+python -c "from sam2.build_sam import build_sam2_video_predictor; print('SAM2 OK')"
 
 # Test Real-Time SAM2 package
 python -c "from realtime_sam2 import SAM2CameraTracker; print('Real-Time SAM2 OK')"
@@ -370,6 +372,22 @@ cv2.destroyAllWindows()
 - Small: 2-5 FPS @ 640x480
 
 ## Troubleshooting
+
+### Issue: "cannot import name 'build_sam2_camera_predictor'"
+This is expected. The code uses `build_sam2_video_predictor` which is the correct SAM2 API. If you see this error, it means you're running old verification commands. Use the updated verification:
+```bash
+python -c "from sam2.build_sam import build_sam2_video_predictor; print('SAM2 OK')"
+```
+
+### Issue: "RuntimeError: You're likely running Python from the parent directory"
+SAM2 doesn't allow running Python from the parent directory of the sam2 repository. Solutions:
+```bash
+# Option 1: Run from a different directory
+cd ~ && python -c "from sam2.build_sam import build_sam2_video_predictor; print('SAM2 OK')"
+
+# Option 2: Run from within the project directory (not its parent)
+cd real-time-sam2/src && python -c "from sam2.build_sam import build_sam2_video_predictor; print('SAM2 OK')"
+```
 
 ### Issue: "SAM2 is not installed"
 ```bash

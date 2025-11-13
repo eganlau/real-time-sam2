@@ -12,7 +12,8 @@ from .utils import (
     get_device,
     preprocess_frame,
     calculate_fps,
-    Colors
+    Colors,
+    FPSCalculator
 )
 
 __version__ = "0.1.0"
@@ -25,5 +26,6 @@ __all__ = [
     "get_device",
     "preprocess_frame",
     "calculate_fps",
-    "Colors"
+    "Colors",
+    "FPSCalculator"
 ]
