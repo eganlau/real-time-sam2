@@ -12,9 +12,46 @@ sys.path.append(".")
 sys.path.append("..")
 
 import torch
-from hydra import compose
+from hydra import compose, initialize_config_dir
+from hydra.core.global_hydra import GlobalHydra
 from hydra.utils import instantiate
 from omegaconf import OmegaConf
+from pathlib import Path
+
+
+def _initialize_hydra():
+    """Initialize Hydra if not already initialized."""
+    if not GlobalHydra().is_initialized():
+        # Find SAM2 configs directory
+        # Try common locations
+        possible_paths = [
+            Path("sam2/sam2/configs"),  # If sam2 is in project root
+            Path("sam2/configs"),  # Alternative structure
+            Path(__file__).parent.parent.parent / "sam2" / "sam2" / "configs",  # Relative to this file
+        ]
+
+        # Also try to find sam2 in installed packages
+        try:
+            import sam2
+            sam2_path = Path(sam2.__file__).parent / "configs"
+            if sam2_path.exists():
+                possible_paths.insert(0, sam2_path)
+        except ImportError:
+            pass
+
+        config_dir = None
+        for path in possible_paths:
+            if path.exists():
+                config_dir = str(path.absolute())
+                break
+
+        if config_dir is None:
+            raise RuntimeError(
+                "Could not find SAM2 configs directory. "
+                "Please ensure SAM2 is installed and configs are available."
+            )
+
+        initialize_config_dir(config_dir=config_dir, version_base=None)
 
 
 def build_sam2(
@@ -25,6 +62,7 @@ def build_sam2(
     hydra_overrides_extra=[],
     apply_postprocessing=True,
 ):
+    _initialize_hydra()
 
     if apply_postprocessing:
         hydra_overrides_extra = hydra_overrides_extra.copy()
@@ -53,6 +91,8 @@ def build_sam2_video_predictor(
     hydra_overrides_extra=[],
     apply_postprocessing=True,
 ):
+    _initialize_hydra()
+
     hydra_overrides = [
         "++model._target_=sam2.sam2_video_predictor.SAM2VideoPredictor",
     ]
@@ -90,6 +130,8 @@ def build_sam2_camera_predictor(
     apply_postprocessing=True,
     vos_optimized=False,
 ):
+    _initialize_hydra()
+
     hydra_overrides = [
         "++model._target_=realtime_sam2.sam2_camera_predictor.SAM2CameraPredictor",
     ]
