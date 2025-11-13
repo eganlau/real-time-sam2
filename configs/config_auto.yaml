@@ -1,0 +1,130 @@
+# Real-Time SAM2 Configuration
+# Configuration file for SAM2 real-time object tracking
+
+model:
+  # Model configuration and checkpoint paths
+  # Use 512x512 config for faster performance, or standard configs for quality
+  # Note: config path is relative to SAM2 package (no 'sam2/' prefix needed for Hydra)
+  config: "configs/sam2.1/sam2.1_hiera_t.yaml"
+  # config: "configs/sam2.1_hiera_t_512.yaml"  # Use this for 512x512 fast mode
+
+  # Checkpoint path - full path from project root
+  checkpoint: "sam2/checkpoints/sam2.1_hiera_tiny.pt"
+  # checkpoint: "sam2/checkpoints/sam2.1_hiera_small.pt"
+  # checkpoint: "sam2/checkpoints/sam2.1_hiera_base_plus.pt"
+  # checkpoint: "sam2/checkpoints/sam2.1_hiera_large.pt"
+
+  # Device to use: null (auto-detect), "mps" (Apple Silicon), "cuda" (NVIDIA), "cpu"
+  device: null
+
+  # Enable torch.compile for speedup (recommended, but has warmup time)
+  compile: true
+
+  # Use bfloat16 mixed precision for faster inference (requires GPU/MPS)
+  use_bfloat16: true
+
+input:
+  # Webcam settings
+  # source: null for auto-detect, 0 for default camera, 1+ for external
+  source: null
+
+  # Prefer external webcam over built-in (macOS and other systems)
+  prefer_external_webcam: true
+
+  # Target resolution for webcam capture (width, height)
+  # Lower resolution = faster processing
+  resolution: [640, 480]
+  # resolution: [1280, 720]  # 720p
+  # resolution: [1920, 1080]  # 1080p
+
+  # Model input resolution (512 for fast mode, 1024 for standard)
+  model_resolution: 512
+
+tracking:
+  # Tracker backend: "camera" or "kalman"
+  # - camera: SAM2CameraPredictor - Manual selection with FIFO memory management
+  #           Supports click-and-drag bbox selection, stable for controlled scenes
+  # - kalman: SAM2ObjectTracker - Automatic tracking with Kalman filter
+  #           Dual memory banks (short/long-term), motion prediction, occlusion handling
+  #           NOTE: Does NOT support manual bbox selection
+  tracker_mode: "camera"
+
+  # Tracking mode: "manual", "auto", or "both"
+  # - manual: User selects objects by clicking/dragging
+  # - auto: Automatically detect objects using YOLO
+  # - both: Supports both manual and automatic detection
+  mode: "auto"  # AUTO MODE - YOLO detects phones automatically
+
+  # Maximum number of objects to track simultaneously
+  max_objects: 10
+
+  # Auto-detection interval (frames)
+  # Run automatic detection every N frames to find new objects
+  auto_detect_interval: 30
+
+  # Confidence threshold for auto-detection (0-1)
+  confidence_threshold: 0.5
+
+  # Target classes for auto-detection
+  # Common COCO classes: "cell phone", "person", "car", "dog", "cat", etc.
+  target_classes:
+    - "cell phone"
+
+performance:
+  # Process every Nth frame (1 = process all frames)
+  # Higher values = faster but less smooth tracking
+  frame_skip: 1
+
+  # Number of warmup frames for torch.compile optimization
+  warmup_frames: 5
+
+  # FPS calculation window size (number of frames to average)
+  fps_window: 30
+
+visualization:
+  # Overlay transparency (0.0 = transparent, 1.0 = opaque)
+  overlay_alpha: 0.5
+
+  # Show bounding boxes around objects
+  show_bbox: true
+
+  # Show object ID labels
+  show_labels: true
+
+  # Show FPS counter
+  show_fps: true
+
+  # Bounding box line thickness
+  bbox_thickness: 2
+
+  # Label font scale
+  label_font_scale: 0.6
+
+  # Colors for different objects (BGR format for OpenCV)
+  colors:
+    - [0, 0, 255]      # Red
+    - [0, 255, 0]      # Green
+    - [255, 0, 0]      # Blue
+    - [0, 255, 255]    # Yellow
+    - [255, 0, 255]    # Magenta
+    - [255, 255, 0]    # Cyan
+    - [0, 165, 255]    # Orange
+    - [128, 0, 128]    # Purple
+    - [203, 192, 255]  # Pink
+    - [0, 255, 128]    # Lime
+
+# YOLO detector settings (for auto-detection)
+detector:
+  # YOLO model size: yolov8n, yolov8s, yolov8m, yolov8l, yolov8x
+  # n = nano (fastest), s = small, m = medium, l = large, x = extra large
+  model_name: "yolov8n.pt"
+
+  # Detection confidence threshold
+  confidence_threshold: 0.5
+
+  # NMS IoU threshold for removing duplicate detections
+  nms_threshold: 0.5
+
+  # Minimum and maximum detection area (in pixels)
+  min_area: 1000
+  max_area: null

@@ -12,7 +12,8 @@ tqdm>=4.65.0
 filterpy>=1.4.5  # For Kalman filter tracking (SAMURAI mode)
 
 # Optional dependencies for auto-detection
-# Uncomment to enable automatic object detection with YOLO
+# REQUIRED for automatic phone detection (tracking mode: "auto" or "both")
+# Install with: pip install ultralytics
 # ultralytics>=8.0.0
 
 # SAM2 dependencies (installed separately)
