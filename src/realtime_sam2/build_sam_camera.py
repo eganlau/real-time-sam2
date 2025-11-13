@@ -33,10 +33,11 @@ def _initialize_hydra():
         # Also try to find sam2 in installed packages
         try:
             import sam2
-            sam2_path = Path(sam2.__file__).parent / "configs"
-            if sam2_path.exists():
-                possible_paths.insert(0, sam2_path)
-        except ImportError:
+            if hasattr(sam2, '__file__') and sam2.__file__ is not None:
+                sam2_path = Path(sam2.__file__).parent / "configs"
+                if sam2_path.exists():
+                    possible_paths.insert(0, sam2_path)
+        except (ImportError, AttributeError, TypeError):
             pass
 
         config_dir = None
