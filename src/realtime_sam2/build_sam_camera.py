@@ -65,6 +65,10 @@ def build_sam2(
 ):
     _initialize_hydra()
 
+    # Strip 'configs/' prefix if present (Hydra already searches in configs dir)
+    if config_file.startswith('configs/'):
+        config_file = config_file[len('configs/'):]
+
     if apply_postprocessing:
         hydra_overrides_extra = hydra_overrides_extra.copy()
         hydra_overrides_extra += [
@@ -93,6 +97,10 @@ def build_sam2_video_predictor(
     apply_postprocessing=True,
 ):
     _initialize_hydra()
+
+    # Strip 'configs/' prefix if present (Hydra already searches in configs dir)
+    if config_file.startswith('configs/'):
+        config_file = config_file[len('configs/'):]
 
     hydra_overrides = [
         "++model._target_=sam2.sam2_video_predictor.SAM2VideoPredictor",
@@ -132,6 +140,10 @@ def build_sam2_camera_predictor(
     vos_optimized=False,
 ):
     _initialize_hydra()
+
+    # Strip 'configs/' prefix if present (Hydra already searches in configs dir)
+    if config_file.startswith('configs/'):
+        config_file = config_file[len('configs/'):]
 
     hydra_overrides = [
         "++model._target_=realtime_sam2.sam2_camera_predictor.SAM2CameraPredictor",
