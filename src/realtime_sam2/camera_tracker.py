@@ -137,7 +137,21 @@ class SAM2CameraTracker:
             self.next_obj_id += 1
 
         try:
-            # Add prompt to current frame
+            # Check if tracking has already started
+            tracking_started = self.predictor.condition_state.get("tracking_has_started", False)
+
+            if tracking_started:
+                # SAM2CameraPredictor doesn't support adding new objects after tracking starts
+                # User must reset (press 'R') to add more objects
+                if self.verbose:
+                    print(f"Cannot add object {obj_id}: tracking already started.")
+                    print("Press 'R' to reset and add multiple objects before tracking starts.")
+                raise RuntimeError(
+                    "Cannot add new objects after tracking starts. "
+                    "Press 'R' to reset, then select all objects before they start moving."
+                )
+
+            # Add prompt before tracking starts
             self.predictor.add_new_prompt(
                 frame_idx=self.frame_idx,
                 obj_id=obj_id,

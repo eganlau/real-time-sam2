@@ -189,7 +189,10 @@ class InteractiveTracker:
             "  [R] - Reset tracking",
             "  [A] - Auto-detect (if enabled)",
             "  [Q] - Quit",
-            "  [Mouse] - Click and drag to select object"
+            "  [Mouse] - Click and drag to select object",
+            "",
+            "Multi-object: Select all objects BEFORE they move",
+            "(Tracking starts after first selection)"
         ]
 
         print("\n" + "\n".join(instructions))
