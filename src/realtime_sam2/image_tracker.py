@@ -22,7 +22,7 @@ class SAM2ImageTracker:
 
     def __init__(
         self,
-        model_cfg: str,
+        config_file: str,
         checkpoint_path: str,
         device: Optional[Union[str, torch.device]] = None,
         verbose: bool = True
@@ -31,7 +31,7 @@ class SAM2ImageTracker:
         Initialize the SAM2 image tracker.
 
         Args:
-            model_cfg: SAM2 model config name (e.g., 'sam2.1_hiera_t')
+            config_file: Path to SAM2 config file (e.g., 'configs/sam2.1/sam2.1_hiera_t.yaml')
             checkpoint_path: Path to SAM2 checkpoint file
             device: Device to use ('mps', 'cuda', 'cpu', or torch.device)
             verbose: Print initialization info
@@ -58,12 +58,12 @@ class SAM2ImageTracker:
 
         if verbose:
             print(f"Loading SAM2 image predictor...")
-            print(f"  Model: {model_cfg}")
+            print(f"  Config: {config_file}")
             print(f"  Checkpoint: {checkpoint_path}")
             print(f"  Device: {self.device}")
 
         # Build model
-        sam2_model = build_sam2(model_cfg, checkpoint_path, device=str(self.device))
+        sam2_model = build_sam2(config_file, checkpoint_path, device=str(self.device))
         self.predictor = SAM2ImagePredictor(sam2_model)
 
         # Tracking state

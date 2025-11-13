@@ -126,7 +126,7 @@ class InteractiveTracker:
 
         # Load tracker
         self.tracker = SAM2ImageTracker(
-            model_cfg='sam2.1_hiera_t',  # Tiny model for speed
+            config_file=model_config.get('config', 'configs/sam2.1/sam2.1_hiera_t.yaml'),
             checkpoint_path=model_config.get('checkpoint', 'sam2/checkpoints/sam2.1_hiera_tiny.pt'),
             device=model_config.get('device'),
             verbose=True
