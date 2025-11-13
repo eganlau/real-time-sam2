@@ -77,12 +77,13 @@ class SAM2KalmanTracker:
             )
 
         # Build object tracker with Kalman filter
+        # Note: We set SAMURAI's verbose to False to avoid cluttering output
         self.tracker = build_sam2_object_tracker(
             num_objects=num_objects,
             config_file=config_file,
             ckpt_path=checkpoint_path,
             device=str(self.device),
-            verbose=verbose,
+            verbose=False,  # Disable SAMURAI's verbose output
             mode="eval"
         )
 
@@ -194,8 +195,14 @@ class SAM2KalmanTracker:
             raise RuntimeError("Tracker not initialized. Call initialize() first.")
 
         try:
+            if self.verbose:
+                print(f"DEBUG: Kalman track() called for frame_idx={self.frame_idx}")
+
             # Run tracking with Kalman filter on all objects
             prediction = self.tracker.track_all_objects(frame)
+
+            if self.verbose:
+                print(f"DEBUG: track_all_objects() returned")
 
             # Extract masks
             masks_dict = {}
@@ -233,8 +240,13 @@ class SAM2KalmanTracker:
             obj_ids = list(masks_dict.keys())
             self.frame_idx += 1
 
-            if self.verbose and len(obj_ids) > 0:
-                print(f"Tracking {len(obj_ids)} objects with Kalman filter")
+            if self.verbose:
+                if len(obj_ids) > 0:
+                    print(f"Tracking {len(obj_ids)} objects with Kalman filter")
+                else:
+                    print(f"Warning: No masks returned from Kalman tracker")
+                    if "pred_masks" in prediction:
+                        print(f"  pred_masks exists but shape: {prediction['pred_masks'].shape if prediction['pred_masks'] is not None else None}")
 
             return self.frame_idx, obj_ids, masks_dict
 
