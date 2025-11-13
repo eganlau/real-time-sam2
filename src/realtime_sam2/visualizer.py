@@ -84,6 +84,10 @@ class Visualizer:
             else:
                 color = Colors.get_color(obj_id)
 
+            # Convert tensor to numpy if needed
+            if hasattr(mask, 'cpu'):
+                mask = mask.cpu().numpy()
+
             # Resize mask if needed
             if mask.shape[:2] != frame.shape[:2]:
                 mask = cv2.resize(
