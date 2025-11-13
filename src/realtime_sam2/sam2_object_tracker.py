@@ -9,7 +9,7 @@ import torch
 import torch.nn.functional as F
 from sam2.modeling.sam2_base import SAM2Base, NO_OBJ_SCORE
 from sam2.modeling.sam2_utils import get_1d_sine_pe
-from sam2.utils.kalman_filter import KalmanFilter
+from .kalman_filter import KalmanFilter  # Use local copy
 
 
 class SAM2ObjectTracker(SAM2Base):
