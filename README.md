@@ -16,6 +16,29 @@ Real-time object segmentation and tracking using Meta's **Segment Anything Model
 
 > **Note**: This implementation adapts SAM2's `VideoPredictor` for real-time streaming by maintaining a frame buffer. SAM2 was originally designed for batch video processing, so this streaming adapter accumulates frames. For typical webcam sessions (a few minutes), memory usage is manageable. For longer sessions, use the Reset (R) key to clear the buffer.
 
+## Quick Start
+
+Once you've completed installation (see below), simply run:
+
+```bash
+# Start webcam tracking (manual selection)
+python src/cli_webcam.py
+
+# Use MPS acceleration (Apple Silicon)
+python src/cli_webcam.py --device mps
+
+# Use CUDA (NVIDIA GPU)
+python src/cli_webcam.py --device cuda
+```
+
+**That's it!** No package installation required - just run the scripts directly.
+
+**Controls:**
+- **Mouse**: Click and drag to select objects
+- **Space**: Pause/Resume
+- **R**: Reset tracking
+- **Q**: Quit
+
 ## Project Structure
 
 ```
@@ -46,6 +69,8 @@ real-time-sam2/
 - **Optional**: CUDA-capable GPU for best performance, or Apple Silicon for MPS acceleration
 
 ## Installation
+
+> **Important**: You only need to install **dependencies** (SAM2, PyTorch, etc.). You do NOT need to install this project itself - just run the scripts directly!
 
 ### Step 1: Install Miniconda (if not already installed)
 
@@ -158,18 +183,17 @@ wget https://dl.fbaipublicfiles.com/segment_anything_2/092824/sam2.1_hiera_large
 cd ../..
 ```
 
-### Step 6: Install Real-Time SAM2 Package
+### Step 6: Install Dependencies
 
 ```bash
 # Install core dependencies
 pip install -r requirements.txt
 
-# Optional: Install with automatic detection support
-pip install -r requirements.txt ultralytics
-
-# Install the package in development mode
-pip install -e .
+# Optional: Install YOLO for automatic object detection
+pip install ultralytics
 ```
+
+**Note**: You do NOT need to install this project as a package. Simply run the scripts directly.
 
 ### Step 7: Verify Installation
 
@@ -186,8 +210,8 @@ python -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}')"
 # Test SAM2 installation
 python -c "from sam2.build_sam import build_sam2_video_predictor; print('SAM2 OK')"
 
-# Test Real-Time SAM2 package
-python -c "from realtime_sam2 import SAM2CameraTracker; print('Real-Time SAM2 OK')"
+# Test the tracker by running it
+python src/cli_webcam.py --help
 ```
 
 ## Configuration
@@ -287,7 +311,15 @@ python src/cli_video.py input.mp4 output.mp4 \
 
 ### Python Library Usage
 
+You can import and use the tracker components in your own Python scripts:
+
 ```python
+import sys
+from pathlib import Path
+
+# Add src directory to path (if running from project root)
+sys.path.insert(0, str(Path(__file__).parent / "src"))
+
 from realtime_sam2 import SAM2CameraTracker, InputHandler, Visualizer
 import cv2
 
@@ -390,8 +422,18 @@ cd real-time-sam2/src && python -c "from sam2.build_sam import build_sam2_video_
 ```
 
 ### Issue: "SAM2 is not installed"
+Make sure you've cloned and installed SAM2:
 ```bash
-cd sam2 && pip install -e . && cd ..
+# Clone SAM2 if you haven't already
+git clone https://github.com/facebookresearch/sam2.git
+
+# Install SAM2 (required dependency)
+cd sam2
+pip install -e .
+cd ..
+
+# Verify SAM2 is installed
+python -c "from sam2.build_sam import build_sam2_video_predictor; print('SAM2 OK')"
 ```
 
 ### Issue: "Model checkpoint not found"
