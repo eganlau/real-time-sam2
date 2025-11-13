@@ -108,7 +108,7 @@ def build_sam2_object_tracker(
     apply_postprocessing=True,
 ):
     hydra_overrides = [
-        "++model._target_=sam2.sam2_object_tracker.SAM2ObjectTracker",
+        "++model._target_=realtime_sam2.sam2_object_tracker.SAM2ObjectTracker",
     ]
     if apply_postprocessing:
         hydra_overrides_extra = hydra_overrides_extra.copy()

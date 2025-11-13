@@ -86,12 +86,12 @@ def build_sam2_camera_predictor(
     vos_optimized=False,
 ):
     hydra_overrides = [
-        "++model._target_=sam2.sam2_camera_predictor.SAM2CameraPredictor",
+        "++model._target_=realtime_sam2.sam2_camera_predictor.SAM2CameraPredictor",
     ]
 
     if vos_optimized:
         hydra_overrides = [
-            "++model._target_=sam2.sam2_camera_predictor.SAM2CameraPredictorVOS",
+            "++model._target_=realtime_sam2.sam2_camera_predictor.SAM2CameraPredictorVOS",
         ]
 
     if apply_postprocessing:
