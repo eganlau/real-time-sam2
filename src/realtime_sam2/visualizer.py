@@ -90,7 +90,10 @@ class Visualizer:
                     mask.astype(np.uint8),
                     (frame.shape[1], frame.shape[0]),
                     interpolation=cv2.INTER_NEAREST
-                ).astype(bool)
+                )
+
+            # Ensure mask is boolean for indexing
+            mask = mask.astype(bool)
 
             # Apply color to mask region
             overlay[mask] = color
