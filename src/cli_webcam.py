@@ -23,7 +23,6 @@ from realtime_sam2 import (
     Colors
 )
 from realtime_sam2.camera_tracker import SAM2CameraTracker
-from realtime_sam2.kalman_tracker import SAM2KalmanTracker
 
 
 class InteractiveTracker:
@@ -124,30 +123,15 @@ class InteractiveTracker:
         viz_config = self.config.get('visualization', {})
         tracking_config = self.config.get('tracking', {})
 
-        # Get tracker mode
-        tracker_mode = tracking_config.get('tracker_mode', 'camera')
+        print(f"Initializing SAM2 Camera Tracker...")
 
-        print(f"Initializing SAM2 Tracker (mode: {tracker_mode})...")
-
-        # Factory pattern: create appropriate tracker
-        if tracker_mode == 'camera':
-            self.tracker = SAM2CameraTracker(
-                config_file=model_config.get('config', 'configs/sam2.1/sam2.1_hiera_t.yaml'),
-                checkpoint_path=model_config.get('checkpoint', 'sam2/checkpoints/sam2.1_hiera_tiny.pt'),
-                device=model_config.get('device'),
-                verbose=True
-            )
-        elif tracker_mode == 'kalman':
-            self.tracker = SAM2KalmanTracker(
-                config_file=model_config.get('config', 'configs/sam2.1/sam2.1_hiera_t.yaml'),
-                checkpoint_path=model_config.get('checkpoint', 'sam2/checkpoints/sam2.1_hiera_tiny.pt'),
-                device=model_config.get('device'),
-                num_objects=tracking_config.get('max_objects', 10),
-                verbose=True
-            )
-            print("NOTE: Kalman tracker uses dual memory banks with motion prediction for robust tracking")
-        else:
-            raise ValueError(f"Unknown tracker mode: {tracker_mode}. Choose 'camera' or 'kalman'")
+        # Initialize SAM2 Camera Tracker
+        self.tracker = SAM2CameraTracker(
+            config_file=model_config.get('config', 'configs/sam2.1/sam2.1_hiera_t.yaml'),
+            checkpoint_path=model_config.get('checkpoint', 'sam2/checkpoints/sam2.1_hiera_tiny.pt'),
+            device=model_config.get('device'),
+            verbose=True
+        )
 
         # Open webcam
         print("Opening webcam...")
@@ -339,13 +323,6 @@ def main():
         action='store_true',
         help='Disable torch.compile'
     )
-    parser.add_argument(
-        '--tracker-mode',
-        type=str,
-        choices=['camera', 'kalman'],
-        default='camera',
-        help='Tracker mode: camera (manual selection, FIFO memory) or kalman (automatic, dual memory with Kalman filter)'
-    )
 
     args = parser.parse_args()
 
@@ -357,10 +334,6 @@ def main():
         config['model']['device'] = args.device
     if args.no_compile:
         config['model']['compile'] = False
-    if args.tracker_mode:
-        if 'tracking' not in config:
-            config['tracking'] = {}
-        config['tracking']['tracker_mode'] = args.tracker_mode
 
     # Run tracker
     tracker = InteractiveTracker(config)

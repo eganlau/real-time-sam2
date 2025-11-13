@@ -41,14 +41,6 @@ input:
   model_resolution: 512
 
 tracking:
-  # Tracker backend: "camera" or "kalman"
-  # - camera: SAM2CameraPredictor - Manual selection with FIFO memory management
-  #           Supports click-and-drag bbox selection, stable for controlled scenes
-  # - kalman: SAM2ObjectTracker - Automatic tracking with Kalman filter
-  #           Dual memory banks (short/long-term), motion prediction, occlusion handling
-  #           NOTE: Does NOT support manual bbox selection
-  tracker_mode: "camera"
-
   # Tracking mode: "manual", "auto", or "both"
   # - manual: User selects objects by clicking/dragging
   # - auto: Automatically detect objects using YOLO

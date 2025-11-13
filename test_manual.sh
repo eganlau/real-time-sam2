@@ -19,4 +19,4 @@ echo ""
 echo "Starting in 3 seconds..."
 sleep 3
 
-python src/cli_webcam.py --device mps --tracker-mode camera
+python src/cli_webcam.py --device mps

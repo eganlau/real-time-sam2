@@ -19,7 +19,7 @@ This guide will help you test both **manual selection** and **automatic phone de
 
 ---
 
-## Test 1: Manual Phone Selection (Camera Mode)
+## Test 1: Manual Phone Selection
 
 **What this tests:** Interactive click-and-drag selection with temporal memory.
 
@@ -30,7 +30,7 @@ No config changes needed - this is the default mode.
 ### Run
 
 ```bash
-python src/cli_webcam.py --device mps --tracker-mode camera
+python src/cli_webcam.py --device mps
 ```
 
 ### How to Test
@@ -77,7 +77,6 @@ python src/cli_webcam.py --device mps --tracker-mode camera
 Edit `configs/config.yaml`:
 ```yaml
 tracking:
-  tracker_mode: "camera"
   mode: "auto"  # Change from "manual" to "auto"
   confidence_threshold: 0.5
   target_classes:
@@ -261,16 +260,13 @@ confidence_threshold: 0.7  # Higher = more strict
 
 ```bash
 # Manual selection (default)
-python src/cli_webcam.py --device mps --tracker-mode camera
+python src/cli_webcam.py --device mps
 
 # Auto-detection (if config.yaml has mode: "auto")
 python src/cli_webcam.py --device mps
 
 # Auto-detection (one-time test)
 python src/cli_webcam.py --device mps --config configs/config_auto.yaml
-
-# Kalman mode (automatic, no YOLO needed but no bbox selection)
-python src/cli_webcam.py --device mps --tracker-mode kalman
 ```
 
 ---
