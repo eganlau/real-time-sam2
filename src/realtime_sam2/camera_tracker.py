@@ -189,8 +189,20 @@ class SAM2CameraTracker:
             raise RuntimeError("Tracker not initialized. Call initialize() first.")
 
         try:
+            if self.verbose:
+                print(f"DEBUG: Calling predictor.track() for frame_idx={self.frame_idx}")
+                print(f"DEBUG: Frame shape={frame.shape}, dtype={frame.dtype}")
+                print(f"DEBUG: Tracked objects={self.get_tracked_objects()}")
+
             # Track in current frame
             obj_ids, video_res_masks = self.predictor.track(frame)
+
+            if self.verbose:
+                print(f"DEBUG: Track returned obj_ids={obj_ids}")
+                if video_res_masks is not None:
+                    print(f"DEBUG: Masks shape={video_res_masks.shape}, dtype={video_res_masks.dtype}")
+                else:
+                    print(f"DEBUG: No masks returned")
 
             # Convert to masks dictionary
             masks_dict = {}
@@ -206,7 +218,9 @@ class SAM2CameraTracker:
 
         except Exception as e:
             if self.verbose:
-                print(f"Tracking error: {e}")
+                print(f"ERROR in track(): {e}")
+                import traceback
+                traceback.print_exc()
             return self.frame_idx, [], {}
 
     def reset(self):
