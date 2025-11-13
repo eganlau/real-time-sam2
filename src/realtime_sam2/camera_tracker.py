@@ -12,7 +12,6 @@ import numpy as np
 import torch
 
 from .utils import get_device
-from .sam2_camera_predictor import SAM2CameraPredictor
 
 
 class SAM2CameraTracker:
@@ -55,20 +54,22 @@ class SAM2CameraTracker:
             print(f"  Checkpoint: {checkpoint_path}")
             print(f"  Device: {self.device}")
 
-        # Import SAM2 and build model
+        # Import build function for SAM2CameraPredictor
         try:
-            from sam2.build_sam import build_sam2
+            from .build_sam_camera import build_sam2_camera_predictor
         except ImportError:
             raise ImportError(
-                "SAM2 is not installed. Please install it from "
-                "https://github.com/facebookresearch/sam2"
+                "Camera predictor build functions not found. Check installation."
             )
 
-        # Build SAM2 model
-        sam2_model = build_sam2(config_file, checkpoint_path, device=str(self.device))
-
-        # Create predictor
-        self.predictor = SAM2CameraPredictor(sam2_model)
+        # Build SAM2 camera predictor using proper builder
+        self.predictor = build_sam2_camera_predictor(
+            config_file=config_file,
+            ckpt_path=checkpoint_path,
+            device=str(self.device),
+            mode="eval",
+            apply_postprocessing=True
+        )
 
         # Tracking state
         self.is_initialized = False
