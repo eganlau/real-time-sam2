@@ -104,6 +104,8 @@ class SAM2CameraTracker:
         except Exception as e:
             if self.verbose:
                 print(f"Error initializing tracker: {e}")
+                import traceback
+                traceback.print_exc()
             return False
 
     def add_object(
