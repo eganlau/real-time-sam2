@@ -206,7 +206,6 @@ class InteractiveTracker:
                     ret, frame = self.input_handler.read()
                     if not ret:
                         print("Error reading frame")
-                        print(f"DEBUG: frame_count={self.frame_count}, tracked_objects={len(self.tracker.get_tracked_objects())}")
                         break
 
                     self.current_frame = frame
@@ -220,11 +219,8 @@ class InteractiveTracker:
                         self.auto_detect_objects(frame)
 
                     # Track objects
-                    num_tracked = len(self.tracker.get_tracked_objects())
-                    if num_tracked > 0:
-                        print(f"DEBUG: About to call tracker.track() for {num_tracked} objects")
+                    if len(self.tracker.get_tracked_objects()) > 0:
                         frame_idx, obj_ids, self.masks_dict = self.tracker.track(frame)
-                        print(f"DEBUG: tracker.track() returned {len(obj_ids)} objects, {len(self.masks_dict)} masks")
                     else:
                         self.masks_dict = {}
 

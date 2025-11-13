@@ -119,8 +119,12 @@ class SAM2CameraTracker:
         """
         Add a new object to track.
 
+        IMPORTANT: SAM2CameraPredictor requires prompts to be added on the first frame.
+        This method will reinitialize the tracker with the current frame as the new
+        first frame to ensure the bbox corresponds to what's visible.
+
         Args:
-            frame: Current frame (not used for camera predictor)
+            frame: Current frame to use as the new first frame
             obj_id: Object ID (None = auto-assign)
             bbox: Bounding box as [x1, y1, x2, y2]
             points: Point prompts as (N, 2) array
@@ -151,7 +155,19 @@ class SAM2CameraTracker:
                     "Press 'R' to reset, then select all objects before they start moving."
                 )
 
-            # Add prompt before tracking starts
+            # Check if this is the first object being added
+            num_existing_objects = len(self.get_tracked_objects())
+
+            if num_existing_objects == 0:
+                # First object: reinitialize with current frame as the new first frame
+                # This ensures the bbox coordinates match what's currently visible
+                if self.verbose:
+                    print(f"Reinitializing tracker with current frame for accurate bbox placement")
+                self.predictor.reset_state()
+                self.predictor.load_first_frame(frame)
+                self.frame_idx = 0
+
+            # Add prompt on frame_idx=0 (the first/current frame)
             self.predictor.add_new_prompt(
                 frame_idx=self.frame_idx,
                 obj_id=obj_id,
@@ -189,24 +205,16 @@ class SAM2CameraTracker:
             raise RuntimeError("Tracker not initialized. Call initialize() first.")
 
         try:
-            if self.verbose:
-                print(f"DEBUG: Calling predictor.track() for frame_idx={self.frame_idx}")
-                print(f"DEBUG: Frame shape={frame.shape}, dtype={frame.dtype}")
-                print(f"DEBUG: Tracked objects={self.get_tracked_objects()}")
-
             # Track in current frame
             obj_ids, video_res_masks = self.predictor.track(frame)
-
-            if self.verbose:
-                print(f"DEBUG: Track returned obj_ids={obj_ids}")
-                if video_res_masks is not None:
-                    print(f"DEBUG: Masks shape={video_res_masks.shape}, dtype={video_res_masks.dtype}")
-                else:
-                    print(f"DEBUG: No masks returned")
 
             # Convert to masks dictionary
             masks_dict = {}
             if video_res_masks is not None:
+                # Remove batch dimension if present: [1, num_objects, H, W] -> [num_objects, H, W]
+                if video_res_masks.ndim == 4:
+                    video_res_masks = video_res_masks.squeeze(0)
+
                 for i, obj_id in enumerate(obj_ids):
                     # video_res_masks shape: (num_objects, H, W)
                     mask = video_res_masks[i] > 0.0
