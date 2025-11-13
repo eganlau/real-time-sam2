@@ -71,6 +71,11 @@ class SAM2ImageTracker:
         self.tracked_objects = {}  # obj_id -> prompt_data
         self.next_obj_id = 1
 
+        # Tracking parameters
+        self.bbox_smoothing = 0.7  # Weight for previous bbox (0.7 = 70% old, 30% new)
+        self.bbox_expansion = 1.1  # Expand bbox by 10% to prevent shrinkage
+        self.min_bbox_size = 20  # Minimum width/height in pixels
+
         if verbose:
             print("SAM2 image tracker initialized!")
 
@@ -127,12 +132,13 @@ class SAM2ImageTracker:
 
         return obj_id
 
-    def _mask_to_bbox(self, mask: np.ndarray) -> Optional[np.ndarray]:
+    def _mask_to_bbox(self, mask: np.ndarray, expand: bool = True) -> Optional[np.ndarray]:
         """
-        Extract bounding box from a binary mask.
+        Extract bounding box from a binary mask with optional expansion.
 
         Args:
             mask: Binary mask array
+            expand: Whether to expand the bbox to prevent shrinkage
 
         Returns:
             Bounding box as [x1, y1, x2, y2] or None if mask is empty
@@ -150,7 +156,54 @@ class SAM2ImageTracker:
         y1, y2 = np.where(rows)[0][[0, -1]]
         x1, x2 = np.where(cols)[0][[0, -1]]
 
-        return np.array([x1, y1, x2, y2], dtype=np.float32)
+        bbox = np.array([x1, y1, x2, y2], dtype=np.float32)
+
+        # Expand bbox to prevent gradual shrinkage
+        if expand:
+            width = x2 - x1
+            height = y2 - y1
+            center_x = (x1 + x2) / 2
+            center_y = (y1 + y2) / 2
+
+            new_width = width * self.bbox_expansion
+            new_height = height * self.bbox_expansion
+
+            bbox = np.array([
+                center_x - new_width / 2,
+                center_y - new_height / 2,
+                center_x + new_width / 2,
+                center_y + new_height / 2
+            ], dtype=np.float32)
+
+            # Clip to image bounds
+            h, w = mask.shape[:2]
+            bbox = np.clip(bbox, [0, 0, 0, 0], [w, h, w, h])
+
+        return bbox
+
+    def _smooth_bbox(self, new_bbox: np.ndarray, old_bbox: np.ndarray) -> np.ndarray:
+        """
+        Smooth bounding box using exponential moving average.
+
+        Args:
+            new_bbox: Newly detected bbox [x1, y1, x2, y2]
+            old_bbox: Previous bbox [x1, y1, x2, y2]
+
+        Returns:
+            Smoothed bbox
+        """
+        # Ensure minimum size
+        width = new_bbox[2] - new_bbox[0]
+        height = new_bbox[3] - new_bbox[1]
+
+        if width < self.min_bbox_size or height < self.min_bbox_size:
+            # Keep old bbox if new one is too small
+            return old_bbox
+
+        # Exponential moving average
+        smoothed = self.bbox_smoothing * old_bbox + (1 - self.bbox_smoothing) * new_bbox
+
+        return smoothed.astype(np.float32)
 
     def track(
         self,
@@ -194,9 +247,12 @@ class SAM2ImageTracker:
 
                         # Update bbox based on current mask for next frame
                         # This enables actual tracking as objects move
-                        new_bbox = self._mask_to_bbox(mask)
+                        new_bbox = self._mask_to_bbox(mask, expand=True)
                         if new_bbox is not None:
-                            self.tracked_objects[obj_id]['bbox'] = new_bbox
+                            old_bbox = prompt_data['bbox']
+                            # Smooth bbox to reduce jitter and prevent shrinkage
+                            smoothed_bbox = self._smooth_bbox(new_bbox, old_bbox)
+                            self.tracked_objects[obj_id]['bbox'] = smoothed_bbox
 
                 except Exception as e:
                     if self.verbose:
