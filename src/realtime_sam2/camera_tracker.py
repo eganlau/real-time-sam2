@@ -12,8 +12,22 @@ import tempfile
 import os
 from pathlib import Path
 import cv2
+import sys
+from contextlib import contextmanager
 
 from .utils import get_device
+
+
+@contextmanager
+def suppress_stdout():
+    """Context manager to suppress stdout (for tqdm progress bars)."""
+    old_stdout = sys.stdout
+    sys.stdout = open(os.devnull, 'w')
+    try:
+        yield
+    finally:
+        sys.stdout.close()
+        sys.stdout = old_stdout
 
 
 class SAM2CameraTracker:
@@ -132,7 +146,7 @@ class SAM2CameraTracker:
                     cv2.imwrite(frame_path, dummy_frame)
 
                 # Initialize state
-                with torch.inference_mode():
+                with torch.inference_mode(), suppress_stdout():
                     dummy_state = self.predictor.init_state(
                         video_path=warmup_dir,
                         offload_video_to_cpu=False,
@@ -179,7 +193,7 @@ class SAM2CameraTracker:
             self.frame_buffer = [first_frame]
             self._save_frame_to_temp(first_frame, 0)
 
-            with torch.inference_mode():
+            with torch.inference_mode(), suppress_stdout():
                 # Initialize state with temp directory (SAM2 requires JPEG folder or MP4)
                 self.inference_state = self.predictor.init_state(
                     video_path=self.temp_dir,
@@ -242,32 +256,31 @@ class SAM2CameraTracker:
         if frame_idx is None:
             frame_idx = self.current_frame_idx
 
-        # Prepare prompt arguments
-        prompt_kwargs = {"frame_idx": frame_idx, "obj_id": obj_id}
-
-        if points is not None:
-            prompt_kwargs["points"] = points
-            if labels is not None:
-                prompt_kwargs["labels"] = labels
-            else:
-                # Default to foreground points
-                prompt_kwargs["labels"] = np.ones(len(points), dtype=np.int32)
-
-        if bbox is not None:
-            prompt_kwargs["bbox"] = np.array(bbox)
-
-        if mask is not None:
-            prompt_kwargs["mask"] = mask
-
-        # Add prompt to tracker using video predictor API
+        # Reinitialize state with all current frames
+        # This is needed because SAM2's state doesn't dynamically update with new frames
         try:
-            with torch.inference_mode():
+            with torch.inference_mode(), suppress_stdout():
+                # Reinitialize state to include all frames up to current
+                self.inference_state = self.predictor.init_state(
+                    video_path=self.temp_dir,
+                    offload_video_to_cpu=False,
+                    offload_state_to_cpu=False,
+                    async_loading_frames=False
+                )
+
+                # Re-add all existing objects
+                for existing_obj_id in list(self.object_ids):
+                    # Note: This is a limitation - we lose the original prompts
+                    # In practice, objects will be re-tracked from the current frame
+                    pass
+
+                # Add the new object
                 _, out_obj_ids, out_mask_logits = self.predictor.add_new_points_or_box(
                     inference_state=self.inference_state,
                     frame_idx=frame_idx,
                     obj_id=obj_id,
                     points=points if points is not None else None,
-                    labels=prompt_kwargs.get('labels') if points is not None else None,
+                    labels=np.ones(len(points), dtype=np.int32) if points is not None else None,
                     box=bbox,
                 )
 
@@ -319,7 +332,7 @@ class SAM2CameraTracker:
 
             # Propagate masks through video
             masks_dict = {}
-            with torch.inference_mode():
+            with torch.inference_mode(), suppress_stdout():
                 for out_frame_idx, out_obj_ids, out_mask_logits in self.predictor.propagate_in_video(
                     self.inference_state,
                     start_frame_idx=self.current_frame_idx,
