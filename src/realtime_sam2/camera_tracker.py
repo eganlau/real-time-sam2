@@ -1,78 +1,45 @@
 """
-SAM2 Camera Tracker - Real-time object tracking with streaming predictor.
+SAM2 Camera Tracker - Wrapper around SAM2CameraPredictor
 
-This module provides a wrapper around SAM2's camera predictor optimized
-for streaming video from webcams or video files.
+Provides a simplified API wrapper around Meta's SAM2CameraPredictor
+for real-time streaming object tracking.
+
+Reference: segment-anything-2-real-time
 """
 
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple
 import numpy as np
 import torch
-import tempfile
-import os
-from pathlib import Path
-import cv2
-import sys
-from contextlib import contextmanager
 
 from .utils import get_device
-
-
-@contextmanager
-def suppress_output():
-    """Context manager to suppress stdout and stderr (for tqdm progress bars)."""
-    old_stdout = sys.stdout
-    old_stderr = sys.stderr
-    try:
-        sys.stdout = open(os.devnull, 'w')
-        sys.stderr = open(os.devnull, 'w')
-        yield
-    finally:
-        sys.stdout.close()
-        sys.stderr.close()
-        sys.stdout = old_stdout
-        sys.stderr = old_stderr
+from .sam2_camera_predictor import SAM2CameraPredictor
 
 
 class SAM2CameraTracker:
     """
-    Real-time object tracker using SAM2's camera predictor.
+    Simplified wrapper around SAM2CameraPredictor for streaming tracking.
 
-    This class wraps SAM2's build_sam2_camera_predictor for efficient
-    streaming video segmentation and tracking.
+    This provides our standard API (initialize, add_object, track, reset)
+    around Meta's SAM2CameraPredictor implementation.
     """
 
     def __init__(
         self,
         config_file: str,
         checkpoint_path: str,
-        device: Optional[Union[str, torch.device]] = None,
-        use_compile: bool = True,
-        use_bfloat16: bool = True,
+        device: Optional[str] = None,
         verbose: bool = True
     ):
         """
         Initialize the SAM2 camera tracker.
 
         Args:
-            config_file: Path to SAM2 configuration file
-            checkpoint_path: Path to SAM2 checkpoint file
-            device: Device to use ('mps', 'cuda', 'cpu', or torch.device)
-            use_compile: Enable torch.compile for speedup
-            use_bfloat16: Use bfloat16 mixed precision
+            config_file: Path to SAM2 config file
+            checkpoint_path: Path to SAM2 checkpoint
+            device: Device to use ('mps', 'cuda', 'cpu')
             verbose: Print initialization info
         """
         self.verbose = verbose
-
-        # Import SAM2 (deferred to allow installation without SAM2)
-        try:
-            from sam2.build_sam import build_sam2_video_predictor
-            from sam2.sam2_video_predictor import SAM2VideoPredictor
-        except ImportError:
-            raise ImportError(
-                "SAM2 is not installed. Please install it from "
-                "https://github.com/facebookresearch/sam2"
-            )
 
         # Set device
         if device is None:
@@ -83,134 +50,53 @@ class SAM2CameraTracker:
             self.device = device
 
         if verbose:
-            print(f"Loading SAM2 camera predictor...")
+            print(f"Loading SAM2 camera tracker...")
             print(f"  Config: {config_file}")
             print(f"  Checkpoint: {checkpoint_path}")
             print(f"  Device: {self.device}")
 
-        # Build predictor
-        self.predictor = build_sam2_video_predictor(
-            config_file=config_file,
-            ckpt_path=checkpoint_path,
-            device=str(self.device)
-        )
+        # Import SAM2 and build model
+        try:
+            from sam2.build_sam import build_sam2
+        except ImportError:
+            raise ImportError(
+                "SAM2 is not installed. Please install it from "
+                "https://github.com/facebookresearch/sam2"
+            )
 
-        # Streaming state
-        self.inference_state = None
-        self.frame_buffer = []
+        # Build SAM2 model
+        sam2_model = build_sam2(config_file, checkpoint_path, device=str(self.device))
 
-        # Temporary directory for storing frames (SAM2 requires JPEG folder or MP4)
-        self.temp_dir = tempfile.mkdtemp(prefix="sam2_frames_")
-        self.temp_frame_paths = []
+        # Create predictor
+        self.predictor = SAM2CameraPredictor(sam2_model)
 
-        # Enable torch.compile for speedup
-        if use_compile:
-            if verbose:
-                print("Enabling torch.compile (will warmup on first use)...")
-            try:
-                self.predictor = torch.compile(
-                    self.predictor,
-                    mode="reduce-overhead"
-                )
-                self.is_compiled = True
-            except Exception as e:
-                if verbose:
-                    print(f"Warning: torch.compile failed: {e}")
-                self.is_compiled = False
-        else:
-            self.is_compiled = False
-
-        self.use_bfloat16 = use_bfloat16
+        # Tracking state
         self.is_initialized = False
-        self.current_frame_idx = 0
-        self.object_ids = set()
+        self.frame_idx = 0
         self.next_obj_id = 1
 
         if verbose:
             print("SAM2 camera tracker initialized!")
-
-    def warmup(self, dummy_frame: np.ndarray, num_frames: int = 3):
-        """
-        Warm up the model for torch.compile optimization.
-
-        Args:
-            dummy_frame: A representative frame for warmup
-            num_frames: Number of warmup iterations
-        """
-        if self.is_compiled and self.verbose:
-            print(f"Warming up compiled model with {num_frames} iterations...")
-
-            try:
-                # Create temporary directory for warmup frames
-                warmup_dir = tempfile.mkdtemp(prefix="sam2_warmup_")
-
-                # Save dummy frames
-                for i in range(num_frames):
-                    frame_path = os.path.join(warmup_dir, f"{i:05d}.jpg")
-                    cv2.imwrite(frame_path, dummy_frame)
-
-                # Initialize state
-                with torch.inference_mode(), suppress_output():
-                    dummy_state = self.predictor.init_state(
-                        video_path=warmup_dir,
-                        offload_video_to_cpu=False,
-                        offload_state_to_cpu=False,
-                        async_loading_frames=False
-                    )
-
-                    # Add a dummy object
-                    h, w = dummy_frame.shape[:2]
-                    _, _, _ = self.predictor.add_new_points_or_box(
-                        inference_state=dummy_state,
-                        frame_idx=0,
-                        obj_id=1,
-                        box=np.array([w//4, h//4, 3*w//4, 3*h//4]),
-                    )
-
-                    # Propagate through frames
-                    for _ in self.predictor.propagate_in_video(dummy_state):
-                        pass
-
-                # Cleanup warmup directory
-                import shutil
-                shutil.rmtree(warmup_dir, ignore_errors=True)
-
-                if self.verbose:
-                    print("Warmup complete!")
-
-            except Exception as e:
-                if self.verbose:
-                    print(f"Warning: Warmup failed with error: {e}")
 
     def initialize(self, first_frame: np.ndarray) -> bool:
         """
         Initialize tracking with the first frame.
 
         Args:
-            first_frame: First video frame (numpy array, RGB or BGR)
+            first_frame: First video frame (numpy array, BGR format)
 
         Returns:
             True if initialization successful
         """
         try:
-            # Reset frame buffer and add first frame
-            self.frame_buffer = [first_frame]
-            self._save_frame_to_temp(first_frame, 0)
-
-            with torch.inference_mode(), suppress_output():
-                # Initialize state with temp directory (SAM2 requires JPEG folder or MP4)
-                self.inference_state = self.predictor.init_state(
-                    video_path=self.temp_dir,
-                    offload_video_to_cpu=False,
-                    offload_state_to_cpu=False,
-                    async_loading_frames=False
-                )
+            # Load first frame into predictor
+            self.predictor.load_first_frame(first_frame)
 
             self.is_initialized = True
-            self.current_frame_idx = 0
+            self.frame_idx = 0
 
             if self.verbose:
-                print("Tracker initialized with first frame")
+                print(f"Initialized with frame size: {first_frame.shape[1]}x{first_frame.shape[0]}")
 
             return True
 
@@ -219,31 +105,23 @@ class SAM2CameraTracker:
                 print(f"Error initializing tracker: {e}")
             return False
 
-    def _save_frame_to_temp(self, frame: np.ndarray, frame_idx: int):
-        """Save a frame to temporary JPEG folder."""
-        frame_path = os.path.join(self.temp_dir, f"{frame_idx:05d}.jpg")
-        cv2.imwrite(frame_path, frame)
-        self.temp_frame_paths.append(frame_path)
-
     def add_object(
         self,
-        frame_idx: Optional[int] = None,
+        frame: np.ndarray,
         obj_id: Optional[int] = None,
+        bbox: Optional[List[int]] = None,
         points: Optional[np.ndarray] = None,
-        labels: Optional[np.ndarray] = None,
-        bbox: Optional[Union[List[int], Tuple[int, int, int, int]]] = None,
-        mask: Optional[np.ndarray] = None
+        labels: Optional[np.ndarray] = None
     ) -> int:
         """
-        Add a new object to track with prompts.
+        Add a new object to track.
 
         Args:
-            frame_idx: Frame index (None = current frame)
+            frame: Current frame (not used for camera predictor)
             obj_id: Object ID (None = auto-assign)
+            bbox: Bounding box as [x1, y1, x2, y2]
             points: Point prompts as (N, 2) array
             labels: Point labels (1=foreground, 0=background)
-            bbox: Bounding box as [x1, y1, x2, y2]
-            mask: Mask prompt as binary array
 
         Returns:
             The object ID assigned
@@ -251,47 +129,23 @@ class SAM2CameraTracker:
         if not self.is_initialized:
             raise RuntimeError("Tracker not initialized. Call initialize() first.")
 
-        # Auto-assign object ID if not provided
         if obj_id is None:
             obj_id = self.next_obj_id
             self.next_obj_id += 1
 
-        # Use current frame index if not specified
-        if frame_idx is None:
-            frame_idx = self.current_frame_idx
-
-        # Reinitialize state with all current frames
-        # This is needed because SAM2's state doesn't dynamically update with new frames
         try:
-            with torch.inference_mode(), suppress_output():
-                # Reinitialize state to include all frames up to current
-                self.inference_state = self.predictor.init_state(
-                    video_path=self.temp_dir,
-                    offload_video_to_cpu=False,
-                    offload_state_to_cpu=False,
-                    async_loading_frames=False
-                )
-
-                # Re-add all existing objects
-                for existing_obj_id in list(self.object_ids):
-                    # Note: This is a limitation - we lose the original prompts
-                    # In practice, objects will be re-tracked from the current frame
-                    pass
-
-                # Add the new object
-                _, out_obj_ids, out_mask_logits = self.predictor.add_new_points_or_box(
-                    inference_state=self.inference_state,
-                    frame_idx=frame_idx,
-                    obj_id=obj_id,
-                    points=points if points is not None else None,
-                    labels=np.ones(len(points), dtype=np.int32) if points is not None else None,
-                    box=bbox,
-                )
-
-            self.object_ids.add(obj_id)
+            # Add prompt to current frame
+            self.predictor.add_new_prompt(
+                frame_idx=self.frame_idx,
+                obj_id=obj_id,
+                bbox=bbox if bbox is not None else None,
+                points=points,
+                labels=labels,
+                normalize_coords=True
+            )
 
             if self.verbose:
-                prompt_type = "bbox" if bbox is not None else "points" if points is not None else "mask"
+                prompt_type = "bbox" if bbox is not None else "points"
                 print(f"Added object {obj_id} with {prompt_type} prompt")
 
             return obj_id
@@ -306,120 +160,68 @@ class SAM2CameraTracker:
         frame: np.ndarray
     ) -> Tuple[int, List[int], Dict[int, np.ndarray]]:
         """
-        Track objects in the next frame.
+        Track objects in the current frame.
 
         Args:
-            frame: Next video frame (numpy array, RGB or BGR)
+            frame: Current video frame (numpy array, BGR format)
 
         Returns:
             Tuple of (frame_idx, object_ids, masks_dict)
-            - frame_idx: Current frame index
-            - object_ids: List of tracked object IDs
-            - masks_dict: Dictionary mapping object_id -> binary mask
         """
         if not self.is_initialized:
             raise RuntimeError("Tracker not initialized. Call initialize() first.")
 
-        # Return empty masks if no objects are being tracked
-        if len(self.object_ids) == 0:
-            return self.current_frame_idx, [], {}
-
         try:
-            # Add new frame to buffer and save to temp
-            self.frame_buffer.append(frame)
-            next_frame_idx = len(self.frame_buffer) - 1
-            self._save_frame_to_temp(frame, next_frame_idx)
+            # Track in current frame
+            obj_ids, video_res_masks = self.predictor.track(frame)
 
-            # Propagate masks through video
-            # We propagate from the last processed frame to the new frame
+            # Convert to masks dictionary
             masks_dict = {}
-            with torch.inference_mode(), suppress_output():
-                for out_frame_idx, out_obj_ids, out_mask_logits in self.predictor.propagate_in_video(
-                    self.inference_state,
-                    start_frame_idx=self.current_frame_idx
-                ):
-                    # Get masks for the new frame
-                    if out_frame_idx == next_frame_idx:
-                        # Convert mask logits to binary masks
-                        for i, obj_id in enumerate(out_obj_ids):
-                            mask_logits = out_mask_logits[i]
-                            # Threshold mask logits (>0 = foreground)
-                            mask = (mask_logits > 0.0).cpu().numpy().squeeze()
-                            masks_dict[obj_id] = mask
+            if video_res_masks is not None:
+                for i, obj_id in enumerate(obj_ids):
+                    # video_res_masks shape: (num_objects, H, W)
+                    mask = video_res_masks[i] > 0.0
+                    masks_dict[obj_id] = mask
 
-            # Update current frame index
-            self.current_frame_idx = next_frame_idx
+            self.frame_idx += 1
 
-            return self.current_frame_idx, list(self.object_ids), masks_dict
+            return self.frame_idx, obj_ids, masks_dict
 
         except Exception as e:
-            # Only print error once per session to avoid spam
-            if not hasattr(self, '_tracking_error_shown'):
-                if self.verbose:
-                    print(f"Tracking error: {e}")
-                    print("(Further tracking errors will be suppressed)")
-                self._tracking_error_shown = True
-            # Return empty masks on error but don't crash
-            return self.current_frame_idx, [], {}
+            if self.verbose:
+                print(f"Tracking error: {e}")
+            return self.frame_idx, [], {}
 
     def reset(self):
         """Reset the tracker state."""
-        self.inference_state = None
-        self.frame_buffer = []
+        self.predictor.reset_state()
         self.is_initialized = False
-        self.current_frame_idx = 0
-        self.object_ids = set()
-
-        # Clean up temp frames but keep directory
-        self._cleanup_temp_frames()
-
+        self.frame_idx = 0
         if self.verbose:
             print("Tracker reset")
 
-    def _cleanup_temp_frames(self):
-        """Clean up temporary frame files."""
-        for frame_path in self.temp_frame_paths:
-            try:
-                if os.path.exists(frame_path):
-                    os.remove(frame_path)
-            except:
-                pass
-        self.temp_frame_paths = []
-
-    def __del__(self):
-        """Cleanup temporary directory on deletion."""
-        try:
-            self._cleanup_temp_frames()
-            if hasattr(self, 'temp_dir') and os.path.exists(self.temp_dir):
-                import shutil
-                shutil.rmtree(self.temp_dir, ignore_errors=True)
-        except:
-            pass
-
     def get_tracked_objects(self) -> List[int]:
         """Get list of currently tracked object IDs."""
-        return sorted(list(self.object_ids))
+        if not self.is_initialized:
+            return []
+        return self.predictor.condition_state.get("obj_ids", [])
 
     def remove_object(self, obj_id: int):
         """
         Remove an object from tracking.
 
-        Note: SAM2 may not support dynamic object removal.
-        This method updates the internal object list only.
+        Args:
+            obj_id: Object ID to remove
         """
-        if obj_id in self.object_ids:
-            self.object_ids.remove(obj_id)
-            if self.verbose:
-                print(f"Removed object {obj_id} from tracking list")
-        else:
-            if self.verbose:
-                print(f"Warning: Object {obj_id} not found in tracking list")
+        # SAM2CameraPredictor doesn't have explicit remove method
+        # This would need to be implemented by clearing from condition_state
+        if self.verbose:
+            print(f"Warning: remove_object not fully implemented for SAM2CameraPredictor")
 
     def __repr__(self) -> str:
         status = "initialized" if self.is_initialized else "not initialized"
-        compiled = "compiled" if self.is_compiled else "not compiled"
+        num_objects = len(self.get_tracked_objects())
         return (
-            f"SAM2CameraTracker(device={self.device}, "
-            f"{status}, {compiled}, "
-            f"tracking {len(self.object_ids)} objects)"
+            f"SAM2CameraTracker(device={self.device}, {status}, "
+            f"tracking {num_objects} objects, frame {self.frame_idx})"
         )
