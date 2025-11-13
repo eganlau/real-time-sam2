@@ -141,6 +141,18 @@ class Visualizer:
             if mask is None or not mask.any():
                 continue
 
+            # Convert tensor to numpy if needed
+            if hasattr(mask, 'cpu'):
+                mask = mask.cpu().numpy()
+
+            # Squeeze any extra dimensions
+            while mask.ndim > 2:
+                mask = mask.squeeze()
+
+            # Skip invalid masks
+            if mask.ndim != 2:
+                continue
+
             # Resize mask if needed
             if mask.shape[:2] != frame.shape[:2]:
                 mask = cv2.resize(
