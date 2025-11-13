@@ -17,12 +17,12 @@ import yaml
 sys.path.insert(0, str(Path(__file__).parent))
 
 from realtime_sam2 import (
-    SAM2CameraTracker,
     InputHandler,
     Visualizer,
     FPSCalculator,
     Colors
 )
+from realtime_sam2.image_tracker import SAM2ImageTracker
 
 
 class InteractiveTracker:
@@ -63,7 +63,7 @@ class InteractiveTracker:
 
     def add_selected_object(self):
         """Add selected region to tracker."""
-        if self.selection_start and self.selection_end:
+        if self.selection_start and self.selection_end and self.current_frame is not None:
             x1, y1 = self.selection_start
             x2, y2 = self.selection_end
 
@@ -71,9 +71,12 @@ class InteractiveTracker:
             x1, x2 = min(x1, x2), max(x1, x2)
             y1, y2 = min(y1, y2), max(y1, y2)
 
-            # Add to tracker
+            # Add to tracker with current frame
             try:
-                obj_id = self.tracker.add_object(bbox=[x1, y1, x2, y2])
+                obj_id = self.tracker.add_object(
+                    frame=self.current_frame,
+                    bbox=[x1, y1, x2, y2]
+                )
                 print(f"Added object {obj_id} with bbox [{x1}, {y1}, {x2}, {y2}]")
             except Exception as e:
                 print(f"Error adding object: {e}")
@@ -106,7 +109,7 @@ class InteractiveTracker:
             for det in detections:
                 # Add detected object to tracker
                 bbox = det['bbox']
-                obj_id = self.tracker.add_object(bbox=bbox)
+                obj_id = self.tracker.add_object(frame=frame, bbox=bbox)
                 print(f"Auto-detected {det['class_name']} (confidence: {det['confidence']:.2f})")
 
         except Exception as e:
@@ -119,15 +122,13 @@ class InteractiveTracker:
         input_config = self.config.get('input', {})
         viz_config = self.config.get('visualization', {})
 
-        print("Initializing SAM2 Camera Tracker...")
+        print("Initializing SAM2 Image Tracker...")
 
         # Load tracker
-        self.tracker = SAM2CameraTracker(
-            config_file=model_config.get('config', 'sam2/configs/sam2.1/sam2.1_hiera_t.yaml'),
+        self.tracker = SAM2ImageTracker(
+            model_cfg='sam2.1_hiera_t',  # Tiny model for speed
             checkpoint_path=model_config.get('checkpoint', 'sam2/checkpoints/sam2.1_hiera_tiny.pt'),
             device=model_config.get('device'),
-            use_compile=model_config.get('compile', True),
-            use_bfloat16=model_config.get('use_bfloat16', True),
             verbose=True
         )
 
@@ -154,12 +155,8 @@ class InteractiveTracker:
             print("Error: Could not read from webcam")
             return
 
-        # Warmup model if compiled
-        if self.tracker.is_compiled:
-            self.tracker.warmup(first_frame, num_frames=3)
-
         # Initialize tracker
-        print("Initializing tracker with first frame...")
+        print("Initializing tracker...")
         self.tracker.initialize(first_frame)
         self.current_frame = first_frame
 
@@ -197,12 +194,12 @@ class InteractiveTracker:
                     # Auto-detect on interval (only if tracking mode allows it)
                     if (self.use_auto_detect and
                         self.frame_count % self.auto_detect_interval == 0 and
-                        len(self.tracker.object_ids) < self.config.get('tracking', {}).get('max_objects', 10) and
+                        len(self.tracker.tracked_objects) < self.config.get('tracking', {}).get('max_objects', 10) and
                         self.tracker.is_initialized):
                         self.auto_detect_objects(frame)
 
                     # Track objects
-                    if len(self.tracker.object_ids) > 0:
+                    if len(self.tracker.tracked_objects) > 0:
                         frame_idx, obj_ids, self.masks_dict = self.tracker.track(frame)
                     else:
                         self.masks_dict = {}
@@ -215,7 +212,7 @@ class InteractiveTracker:
                         frame,
                         self.masks_dict,
                         fps=fps,
-                        instructions=instructions if len(self.tracker.object_ids) == 0 else None
+                        instructions=instructions if len(self.tracker.tracked_objects) == 0 else None
                     )
                 else:
                     # Paused - use current frame

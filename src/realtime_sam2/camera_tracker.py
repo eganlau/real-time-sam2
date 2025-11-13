@@ -19,15 +19,19 @@ from .utils import get_device
 
 
 @contextmanager
-def suppress_stdout():
-    """Context manager to suppress stdout (for tqdm progress bars)."""
+def suppress_output():
+    """Context manager to suppress stdout and stderr (for tqdm progress bars)."""
     old_stdout = sys.stdout
-    sys.stdout = open(os.devnull, 'w')
+    old_stderr = sys.stderr
     try:
+        sys.stdout = open(os.devnull, 'w')
+        sys.stderr = open(os.devnull, 'w')
         yield
     finally:
         sys.stdout.close()
+        sys.stderr.close()
         sys.stdout = old_stdout
+        sys.stderr = old_stderr
 
 
 class SAM2CameraTracker:
@@ -146,7 +150,7 @@ class SAM2CameraTracker:
                     cv2.imwrite(frame_path, dummy_frame)
 
                 # Initialize state
-                with torch.inference_mode(), suppress_stdout():
+                with torch.inference_mode(), suppress_output():
                     dummy_state = self.predictor.init_state(
                         video_path=warmup_dir,
                         offload_video_to_cpu=False,
@@ -193,7 +197,7 @@ class SAM2CameraTracker:
             self.frame_buffer = [first_frame]
             self._save_frame_to_temp(first_frame, 0)
 
-            with torch.inference_mode(), suppress_stdout():
+            with torch.inference_mode(), suppress_output():
                 # Initialize state with temp directory (SAM2 requires JPEG folder or MP4)
                 self.inference_state = self.predictor.init_state(
                     video_path=self.temp_dir,
@@ -259,7 +263,7 @@ class SAM2CameraTracker:
         # Reinitialize state with all current frames
         # This is needed because SAM2's state doesn't dynamically update with new frames
         try:
-            with torch.inference_mode(), suppress_stdout():
+            with torch.inference_mode(), suppress_output():
                 # Reinitialize state to include all frames up to current
                 self.inference_state = self.predictor.init_state(
                     video_path=self.temp_dir,
@@ -323,29 +327,28 @@ class SAM2CameraTracker:
         try:
             # Add new frame to buffer and save to temp
             self.frame_buffer.append(frame)
-            self.current_frame_idx = len(self.frame_buffer) - 1
-            self._save_frame_to_temp(frame, self.current_frame_idx)
-
-            # Note: We don't use a sliding window because SAM2 VideoPredictor
-            # loses object prompts when state is reinitialized.
-            # For typical webcam sessions (a few minutes), keeping all frames is fine.
+            next_frame_idx = len(self.frame_buffer) - 1
+            self._save_frame_to_temp(frame, next_frame_idx)
 
             # Propagate masks through video
+            # We propagate from the last processed frame to the new frame
             masks_dict = {}
-            with torch.inference_mode(), suppress_stdout():
+            with torch.inference_mode(), suppress_output():
                 for out_frame_idx, out_obj_ids, out_mask_logits in self.predictor.propagate_in_video(
                     self.inference_state,
-                    start_frame_idx=self.current_frame_idx,
-                    max_frame_num_to_track=self.current_frame_idx + 1
+                    start_frame_idx=self.current_frame_idx
                 ):
-                    if out_frame_idx == self.current_frame_idx:
-                        # Convert mask logits to binary masks for current frame
+                    # Get masks for the new frame
+                    if out_frame_idx == next_frame_idx:
+                        # Convert mask logits to binary masks
                         for i, obj_id in enumerate(out_obj_ids):
                             mask_logits = out_mask_logits[i]
                             # Threshold mask logits (>0 = foreground)
                             mask = (mask_logits > 0.0).cpu().numpy().squeeze()
                             masks_dict[obj_id] = mask
-                        break
+
+            # Update current frame index
+            self.current_frame_idx = next_frame_idx
 
             return self.current_frame_idx, list(self.object_ids), masks_dict
 
