@@ -205,3 +205,44 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# ============================================
+# Real-Time SAM2 Specific
+# ============================================
+
+# SAM2 model checkpoints (large files)
+sam2/checkpoints/*.pt
+sam2/checkpoints/*.pth
+checkpoints/
+models/
+*.pt
+*.pth
+
+# Output videos and results
+outputs/
+results/
+*.mp4
+*.avi
+*.mov
+*.mkv
+
+# Temporary processing files
+tmp/
+temp/
+*.tmp
+
+# Configuration overrides
+configs/local_*.yaml
+configs/private_*.yaml
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# IDE specific
+.vscode/
+.idea/
+*.swp
+*.swo
+*~

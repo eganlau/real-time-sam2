@@ -1,0 +1,21 @@
+# Real-Time SAM2 Requirements
+# Core dependencies for SAM2 real-time object tracking
+
+# Core dependencies
+torch>=2.5.1
+torchvision>=0.20.1
+numpy>=1.24.0
+opencv-python>=4.8.0
+pyyaml>=6.0
+tqdm>=4.65.0
+
+# Optional dependencies for auto-detection
+# Uncomment to enable automatic object detection with YOLO
+# ultralytics>=8.0.0
+
+# SAM2 dependencies (installed separately)
+# SAM2 should be installed from: https://github.com/facebookresearch/sam2
+# pip install git+https://github.com/facebookresearch/sam2.git
+# or clone and install locally:
+# git clone https://github.com/facebookresearch/sam2.git
+# cd sam2 && pip install -e .

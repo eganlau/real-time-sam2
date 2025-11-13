@@ -1,0 +1,150 @@
+# SAM 2.1 Hiera Tiny Configuration - 512x512 Optimized for Speed
+# Based on official SAM2.1 config with resolution reduced for real-time performance
+# Original: 1024x1024, Optimized: 512x512 (approximately 2-3x faster)
+
+# Model Configuration
+model:
+  _target_: sam2.modeling.sam2_base.SAM2Base
+  image_encoder:
+    _target_: sam2.modeling.backbones.image_encoder.ImageEncoder
+    scalp: 1
+    trunk:
+      _target_: sam2.modeling.backbones.hieradet.Hiera
+      embed_dim: 96
+      num_heads: 1
+      stages: [1, 2, 7, 2]
+      global_att_blocks: [5, 7, 9]
+      window_pos_embed_bos_size: 14  # Updated for 512 (was 14 for 1024)
+      window_spec: [8, 4, 14, 7]
+    neck:
+      _target_: sam2.modeling.backbones.image_encoder.FpnNeck
+      position_encoding:
+        _target_: sam2.modeling.position_encoding.PositionEmbeddingSine
+        num_pos_feats: 256
+        normalize: true
+        scale: null
+        temperature: 10000
+      d_model: 256
+      backbone_channel_list: [768, 384, 192, 96]
+      fpn_top_down_levels: [2, 3]  # output of FPN: level 1 (quarter) and level 2 (eighth) (changed to 0 indexing)
+      fpn_interp_model: nearest
+  memory_attention:
+    _target_: sam2.modeling.memory_attention.MemoryAttention
+    d_model: 256
+    pos_enc_at_input: true
+    layer:
+      _target_: sam2.modeling.memory_attention.MemoryAttentionLayer
+      activation: relu
+      dim_feedforward: 2048
+      dropout: 0.1
+      pos_enc_at_attn: false
+      self_attention:
+        _target_: sam2.modeling.sam.transformer.RoPEAttention
+        rope_theta: 10000.0
+        feat_sizes: [16, 16]  # Updated for 512 (was [32, 32] for 1024)
+        embedding_dim: 256
+        num_heads: 1
+        downsample_rate: 1
+        dropout: 0.1
+      d_model: 256
+      pos_enc_at_cross_attn_keys: true
+      pos_enc_at_cross_attn_queries: false
+      cross_attention:
+        _target_: sam2.modeling.sam.transformer.RoPEAttention
+        rope_theta: 10000.0
+        feat_sizes: [16, 16]  # Updated for 512 (was [32, 32] for 1024)
+        rope_k_repeat: True
+        embedding_dim: 256
+        num_heads: 1
+        downsample_rate: 1
+        dropout: 0.1
+        kv_in_dim: 64
+    num_layers: 4
+  memory_encoder:
+    _target_: sam2.modeling.memory_encoder.MemoryEncoder
+    out_dim: 64
+    position_encoding:
+      _target_: sam2.modeling.position_encoding.PositionEmbeddingSine
+      num_pos_feats: 64
+      normalize: true
+      scale: null
+      temperature: 10000
+    mask_downsampler:
+      _target_: sam2.modeling.memory_encoder.MaskDownSampler
+      kernel_size: 3
+      stride: 2
+      padding: 1
+    fuser:
+      _target_: sam2.modeling.memory_encoder.Fuser
+      layer:
+        _target_: sam2.modeling.memory_encoder.CXBlock
+        dim: 256
+        kernel_size: 7
+        padding: 3
+        layer_scale_init_value: 1e-6
+        use_dwconv: True  # depth-wise convolution
+      num_layers: 2
+  num_maskmem: 7  # number of memories accessible in the memory bank
+  image_size: 512  # Updated for 512 (was 1024)
+  # This applies to the maximum side (if images are not square), so that we can
+  # fit the image into a square window of image_size x image_size during training.
+  # During inference, the actual input image(s) can have any size (and may not be square).
+  backbone_stride: 16  # stride of the image encoder backbone
+  no_obj_embed_spatial: true  # whether to add spatial encoding to the no-object embedding
+  sigmoid_scale_for_mem_enc: 1.0  # scale factor for the sigmoid in the memory encoder
+  sigmoid_bias_for_mem_enc: 0.0  # bias term for the sigmoid in the memory encoder
+  # Whether to binarize the sigmoid mask logits in the memory encoder (note that this
+  # could be the case for SAM 2 training in the original paper, but it appears that using
+  # sigmoid mask logits without binarization actually improves results; so we set it to
+  # False by default here -- see https://github.com/facebookresearch/segment-anything-2/pull/172)
+  binarize_mask_from_pts_for_mem_enc: false
+  use_mask_input_as_output_without_sam: true  # whether to directly use the mask input as output, without using SAM
+  # Whether to use high-resolution feature maps in the SAM mask decoder. This is useful
+  # when the input size is large (e.g. 1024x1024) and we want to improve the mask quality.
+  # Note: for speed, we won't extract high-resolution feature maps from all the layers,
+  # but only for those required by the decoder layers (selected by directly_add_no_mem_embed).
+  multimask_output_in_sam: true
+  multimask_min_pt_num: 0  # minimum point prompts to output multiple masks
+  multimask_max_pt_num: 1  # maximum point prompts to output multiple masks
+  multimask_output_for_tracking: true  # output multiple masks in tracking (e.g. 3 masks)
+  use_multimask_token_for_obj_ptr: true  # use multimask token for object pointers (if set to false, would use the "no_obj_ptr" token above)
+  iou_prediction_use_sigmoid: True  # whether to use sigmoid in the IoU prediction
+  memory_temporal_stride_for_eval: 1  # temporal stride for memory accumulation in evaluation
+  # if `add_all_frames_to_correct_as_cond` is True, we also append to the conditioning frame list any frame that receives a later correction click
+  # if `add_all_frames_to_correct_as_cond` is False, we conditioning frame list to only use those initial conditioning frames
+  add_all_frames_to_correct_as_cond: false
+  # If true, non-conditioning frames (except visible objects in the matching) are not used for updates in the memory bank
+  non_overlap_masks_for_mem_enc: false
+  # use object pointer (introduced in SAM 2) or not
+  use_obj_ptrs_in_encoder: true
+  # the typical maximum number of object pointers per frame is 10 (for more, one can duplicate the object pointers or add more)
+  max_obj_ptrs_in_encoder: 16
+  # Whether to also add non-overlapping masks (at most one mask per object pointer) in the encoder
+  add_tpos_enc_to_obj_ptrs: true
+  proj_tpos_enc_in_obj_ptrs: true
+  use_signed_tpos_enc_to_obj_ptrs: true
+  only_obj_ptrs_in_the_past_for_eval: true
+  # Options for feature downsampling
+  pred_obj_scores: true  # whether to predict if there is an object in the patch
+  pred_obj_scores_mlp: true  # whether to use an MLP on object-level inputs (if False, use a 1x1 conv)
+  fixed_no_obj_ptr: true  # If true, use the no_obj_ptr (a learnable parameter, the first pointer) for all occluded objects
+  # (note that the actual output masks and inboxes are still based on fine-grained per-object information)
+  soft_no_obj_ptr: false  # if set to True, we use Sigmoid on the no_obj_ptr to allow partial occlusion (if the score is around 0.5, the token represents partially visible objects)
+  use_mlp_for_obj_ptr_proj: true
+  # Options for SAM-based decoder
+  sam_mask_decoder_extra_args:
+    dynamic_multimask_via_stability: true
+    dynamic_multimask_stability_delta: 0.05
+    dynamic_multimask_stability_thresh: 0.98
+    pred_iou_thresh: 0.88  # minimal IoU threshold for *multi-mask* outputs (if the model predicts low quality, it will pick the highest quality single mask to avoid outputting false positives)
+    stability_score_offset: 1.0
+    # (note that the threshold above needs to be set on a scale that's comparable to the offset value below)
+  compile_image_encoder: false  # whether to compile the image encoder for speed
+
+# Training Configuration (not used for inference, but kept for compatibility)
+num_frames: 8  # number of frames sampled per training video
+num_cameras: 1  # number of cameras
+batch_size: 1  # batch size
+num_workers: 4  # number of workers for data loading
+checkpoint_period: 10000  # checkpoint every N steps
+eval_period: 5000  # evaluation every N steps
