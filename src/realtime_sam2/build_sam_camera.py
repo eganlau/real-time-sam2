@@ -6,12 +6,10 @@
 
 import logging
 import sys
-from pathlib import Path
 
-# Add src to path so Hydra can import realtime_sam2 module
-src_dir = Path(__file__).parent.parent
-if str(src_dir) not in sys.path:
-    sys.path.insert(0, str(src_dir))
+# Add paths so Hydra can import realtime_sam2 module
+sys.path.append(".")
+sys.path.append("..")
 
 import torch
 from hydra import compose
