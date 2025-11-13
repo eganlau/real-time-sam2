@@ -14,7 +14,7 @@ Real-time object segmentation and tracking using Meta's **Segment Anything Model
 - **External webcam auto-detection** (prefers external over built-in)
 - **Both library and CLI** for maximum flexibility
 
-> **Note**: This implementation adapts SAM2's `VideoPredictor` for real-time streaming by maintaining a frame buffer. SAM2 was originally designed for batch video processing, so this streaming adapter accumulates frames and periodically manages the buffer for optimal performance.
+> **Note**: This implementation adapts SAM2's `VideoPredictor` for real-time streaming by maintaining a frame buffer. SAM2 was originally designed for batch video processing, so this streaming adapter accumulates frames. For typical webcam sessions (a few minutes), memory usage is manageable. For longer sessions, use the Reset (R) key to clear the buffer.
 
 ## Project Structure
 

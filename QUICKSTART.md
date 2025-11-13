@@ -48,16 +48,21 @@ python -c "from realtime_sam2 import SAM2CameraTracker; print('Real-Time SAM2 OK
 # Go back to project directory
 cd ~/dev/nlp/real-time-sam2
 
-# Run the webcam tracker
+# Run the webcam tracker (manual mode by default)
 python src/cli_webcam.py --device mps
 
 # Controls:
 #   - Click and drag to select objects (e.g., your phone)
 #   - Space: Pause/Resume
-#   - R: Reset tracking
-#   - A: Auto-detect (if you installed ultralytics)
+#   - R: Reset tracking (clears buffer and starts fresh)
 #   - Q: Quit
 ```
+
+**Important Tips:**
+- The tracker accumulates frames in memory for SAM2 to work
+- For sessions longer than a few minutes, press **R** to reset and clear memory
+- Start by selecting one object at a time to test
+- Auto-detection is disabled by default to avoid frame index issues
 
 ### Common Issues & Fixes
 

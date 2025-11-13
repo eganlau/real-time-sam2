@@ -194,19 +194,16 @@ class InteractiveTracker:
                     self.current_frame = frame
                     self.frame_count += 1
 
-                    # Auto-detect on interval
+                    # Auto-detect on interval (only if tracking mode allows it)
                     if (self.use_auto_detect and
                         self.frame_count % self.auto_detect_interval == 0 and
-                        len(self.tracker.object_ids) < self.config.get('tracking', {}).get('max_objects', 10)):
+                        len(self.tracker.object_ids) < self.config.get('tracking', {}).get('max_objects', 10) and
+                        self.tracker.is_initialized):
                         self.auto_detect_objects(frame)
 
                     # Track objects
                     if len(self.tracker.object_ids) > 0:
-                        try:
-                            frame_idx, obj_ids, self.masks_dict = self.tracker.track(frame)
-                        except Exception as e:
-                            print(f"Tracking error: {e}")
-                            self.masks_dict = {}
+                        frame_idx, obj_ids, self.masks_dict = self.tracker.track(frame)
                     else:
                         self.masks_dict = {}
 

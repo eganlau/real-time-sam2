@@ -303,48 +303,26 @@ class SAM2CameraTracker:
         if not self.is_initialized:
             raise RuntimeError("Tracker not initialized. Call initialize() first.")
 
+        # Return empty masks if no objects are being tracked
+        if len(self.object_ids) == 0:
+            return self.current_frame_idx, [], {}
+
         try:
             # Add new frame to buffer and save to temp
             self.frame_buffer.append(frame)
             self.current_frame_idx = len(self.frame_buffer) - 1
             self._save_frame_to_temp(frame, self.current_frame_idx)
 
-            # Manage buffer size with sliding window
-            max_buffer_size = 50
-            if len(self.frame_buffer) > max_buffer_size:
-                # Keep only recent frames
-                frames_to_keep = 30
-                frames_to_remove = len(self.frame_buffer) - frames_to_keep
-
-                # Remove old frames from buffer
-                self.frame_buffer = self.frame_buffer[-frames_to_keep:]
-
-                # Remove old frame files
-                for i in range(frames_to_remove):
-                    if i < len(self.temp_frame_paths):
-                        try:
-                            os.remove(self.temp_frame_paths[i])
-                        except:
-                            pass
-                self.temp_frame_paths = self.temp_frame_paths[frames_to_remove:]
-
-                # Reinitialize state with recent frames
-                with torch.inference_mode():
-                    self.inference_state = self.predictor.init_state(
-                        video_path=self.temp_dir,
-                        offload_video_to_cpu=False,
-                        offload_state_to_cpu=False,
-                        async_loading_frames=False
-                    )
-
-                self.current_frame_idx = len(self.frame_buffer) - 1
+            # Note: We don't use a sliding window because SAM2 VideoPredictor
+            # loses object prompts when state is reinitialized.
+            # For typical webcam sessions (a few minutes), keeping all frames is fine.
 
             # Propagate masks through video
             masks_dict = {}
             with torch.inference_mode():
                 for out_frame_idx, out_obj_ids, out_mask_logits in self.predictor.propagate_in_video(
                     self.inference_state,
-                    start_frame_idx=max(0, self.current_frame_idx - 1),
+                    start_frame_idx=self.current_frame_idx,
                     max_frame_num_to_track=self.current_frame_idx + 1
                 ):
                     if out_frame_idx == self.current_frame_idx:
@@ -359,9 +337,14 @@ class SAM2CameraTracker:
             return self.current_frame_idx, list(self.object_ids), masks_dict
 
         except Exception as e:
-            if self.verbose:
-                print(f"Error tracking frame {self.current_frame_idx}: {e}")
-            raise
+            # Only print error once per session to avoid spam
+            if not hasattr(self, '_tracking_error_shown'):
+                if self.verbose:
+                    print(f"Tracking error: {e}")
+                    print("(Further tracking errors will be suppressed)")
+                self._tracking_error_shown = True
+            # Return empty masks on error but don't crash
+            return self.current_frame_idx, [], {}
 
     def reset(self):
         """Reset the tracker state."""

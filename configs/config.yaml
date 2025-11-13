@@ -45,7 +45,7 @@ tracking:
   # - manual: User selects objects by clicking/dragging
   # - auto: Automatically detect objects using YOLO
   # - both: Supports both manual and automatic detection
-  mode: "both"
+  mode: "manual"
 
   # Maximum number of objects to track simultaneously
   max_objects: 10
