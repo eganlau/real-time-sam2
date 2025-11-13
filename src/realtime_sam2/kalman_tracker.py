@@ -153,6 +153,9 @@ class SAM2KalmanTracker:
 
                 box_array = np.array([[x1_norm, y1_norm], [x2_norm, y2_norm]], dtype=np.float32)
 
+            # Get object ID before adding (SAMURAI uses curr_obj_idx counter)
+            assigned_id = self.tracker.curr_obj_idx
+
             # Track new object using SAMURAI's method
             result = self.tracker.track_new_object(
                 img=frame,
@@ -160,11 +163,6 @@ class SAM2KalmanTracker:
                 box=box_array,
                 mask=None
             )
-
-            # Get the assigned object ID from the tracker's memory
-            # SAMURAI uses 0-based indexing internally
-            num_tracked = len(self.tracker.memory_bank.obj_id_to_idx)
-            assigned_id = num_tracked  # 0-based
 
             if self.verbose:
                 prompt_type = "bbox" if bbox is not None else "points"
@@ -249,7 +247,8 @@ class SAM2KalmanTracker:
 
     def reset(self):
         """Reset the tracker state."""
-        # SAM2ObjectTracker resets automatically via memory management
+        # Reset SAMURAI's object counter
+        self.tracker.curr_obj_idx = 0
         self.is_initialized = False
         self.frame_idx = 0
         if self.verbose:
@@ -260,9 +259,10 @@ class SAM2KalmanTracker:
         if not self.is_initialized:
             return []
 
-        # Get tracked object IDs from memory bank
+        # Get tracked object IDs from curr_obj_idx counter
         try:
-            num_objects = len(self.tracker.memory_bank.obj_id_to_idx)
+            # curr_obj_idx tracks how many objects have been added
+            num_objects = self.tracker.curr_obj_idx
             # Return 0-based indices as object IDs
             return list(range(num_objects))
         except:
